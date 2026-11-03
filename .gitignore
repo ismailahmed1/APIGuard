@@ -18,3 +18,9 @@ htmlcov/
 # IDE files
 .vscode/
 .idea/
+
+!.env.example
+.ruff_cache/
+*.egg-info/
+build/
+dist/
