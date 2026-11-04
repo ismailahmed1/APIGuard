@@ -1,6 +1,12 @@
 import subprocess
 import sys
 
+import httpx
+import pytest
+import yaml
+
+from apiguard.cli import main
+
 
 def test_version_command():
     result = subprocess.run(
@@ -13,3 +19,88 @@ def test_version_command():
 
     assert result.returncode == 0
     assert result.stdout.strip() == "0.1.0"
+
+
+@pytest.fixture
+def configured_project(tmp_path, monkeypatch):
+    config_dir = tmp_path / "configs"
+    config_dir.mkdir()
+
+    config = {
+        "name": "nexstock",
+        "base_url": "http://127.0.0.1:8000",
+        "spec_location": "http://127.0.0.1:8000/openapi.json",
+        "timeouts": {
+            "request_seconds": 10,
+            "run_seconds": 120,
+        },
+        "auth": {},
+        "reset": {},
+    }
+
+    (config_dir / "nexstock.yaml").write_text(
+        yaml.safe_dump(config),
+        encoding="utf-8",
+    )
+    monkeypatch.chdir(tmp_path)
+
+
+def test_check_success(configured_project, monkeypatch, capsys):
+    def fake_get(url, **kwargs):
+        assert url == "http://127.0.0.1:8000/openapi.json"
+        assert kwargs["timeout"] == 10
+        return httpx.Response(
+            200,
+            json={"openapi": "3.1.0"},
+            request=httpx.Request("GET", url),
+        )
+
+    monkeypatch.setattr("apiguard.cli.httpx.get", fake_get)
+
+    assert main(["check", "nexstock"]) == 0
+    assert "OK: nexstock is reachable" in capsys.readouterr().out
+
+
+@pytest.mark.parametrize(
+    ("error_class", "message"),
+    [
+        (httpx.ConnectError, "could not reach"),
+        (httpx.ReadTimeout, "timed out"),
+    ],
+)
+def test_connection_errors(configured_project, monkeypatch, capsys, error_class, message):
+    def fake_get(url, **kwargs):
+        raise error_class(
+            "Simulated network failure",
+            request=httpx.Request("GET", url),
+        )
+
+    monkeypatch.setattr("apiguard.cli.httpx.get", fake_get)
+
+    assert main(["check", "nexstock"]) == 1
+    assert message in capsys.readouterr().err
+
+
+def test_http_error(configured_project, monkeypatch, capsys):
+    def fake_get(url, **kwargs):
+        return httpx.Response(
+            503,
+            request=httpx.Request("GET", url),
+        )
+
+    monkeypatch.setattr("apiguard.cli.httpx.get", fake_get)
+
+    assert main(["check", "nexstock"]) == 1
+    assert "HTTP 503" in capsys.readouterr().err
+
+
+def test_missing_config_stops_before_request(tmp_path, monkeypatch, capsys):
+    monkeypatch.chdir(tmp_path)
+
+    def unexpected_request(*args, **kwargs):
+        pytest.fail("Invalid configuration should prevent network requests.")
+
+    monkeypatch.setattr("apiguard.cli.httpx.get", unexpected_request)
+
+    assert main(["check", "nexstock"]) == 2
+    assert "Configuration error" in capsys.readouterr().err
