@@ -7,6 +7,7 @@ import httpx
 
 from apiguard import __version__
 from apiguard.config import ConfigError, load_config
+from apiguard.openapi import SpecError, get_response, load_spec
 
 
 def main(argv=None):
@@ -17,7 +18,7 @@ def main(argv=None):
 
     check_parser = commands.add_parser(
         "check",
-        help="Check configuration and application connectivity.",
+        help="Check configuration, connectivity and the OpenAPI specification.",
     )
     check_parser.add_argument("app", help="Application name, such as nexstock.")
 
@@ -46,18 +47,17 @@ def main(argv=None):
         print(f"Configuration error: {exc}", file=sys.stderr)
         return 2
 
-    # Check the specification URL when one is configured.
-    # For a local specification file, check the application base URL instead.
     location = config["spec_location"]
-    url = location if "://" in location else config["base_url"]
+    timeout = config["timeouts"]["request_seconds"]
 
     try:
-        response = httpx.get(
-            url,
-            timeout=config["timeouts"]["request_seconds"],
-            follow_redirects=True,
-        )
-        response.raise_for_status()
+        load_spec(location, timeout)
+        # A remote spec already proves connectivity; local files do not.
+        if "://" not in location:
+            get_response(config["base_url"], timeout)
+    except SpecError as exc:
+        print(f"Specification error: {exc}", file=sys.stderr)
+        return 2
     except httpx.TimeoutException:
         print("Connection error: the request timed out.", file=sys.stderr)
         return 1
@@ -75,7 +75,7 @@ def main(argv=None):
         )
         return 1
 
-    print(f"OK: {config['name']} is reachable (HTTP {response.status_code}).")
+    print(f"OK: {config['name']} is reachable and its OpenAPI specification is valid.")
     return 0
 
 
