@@ -43,6 +43,7 @@ def configured_project(tmp_path, monkeypatch):
         encoding="utf-8",
     )
     monkeypatch.chdir(tmp_path)
+    return config
 
 
 def test_check_success(configured_project, monkeypatch, capsys):
@@ -51,7 +52,11 @@ def test_check_success(configured_project, monkeypatch, capsys):
         assert kwargs["timeout"] == 10
         return httpx.Response(
             200,
-            json={"openapi": "3.1.0"},
+            json={
+                "openapi": "3.1.0",
+                "info": {"title": "Test API", "version": "1.0.0"},
+                "paths": {},
+            },
             request=httpx.Request("GET", url),
         )
 
@@ -104,3 +109,67 @@ def test_missing_config_stops_before_request(tmp_path, monkeypatch, capsys):
 
     assert main(["check", "nexstock"]) == 2
     assert "Configuration error" in capsys.readouterr().err
+
+
+def test_invalid_remote_spec(configured_project, monkeypatch, capsys):
+    def fake_get(url, **kwargs):
+        return httpx.Response(200, json={"openapi": "3.1.0"}, request=httpx.Request("GET", url))
+
+    monkeypatch.setattr("apiguard.openapi.httpx.get", fake_get)
+    assert main(["check", "nexstock"]) == 2
+    assert "Specification error" in capsys.readouterr().err
+
+
+@pytest.mark.parametrize("status", [200, 503])
+def test_local_spec_checks_base_url(configured_project, tmp_path, monkeypatch, capsys, status):
+    configured_project["spec_location"] = "openapi.yaml"
+    (tmp_path / "configs" / "nexstock.yaml").write_text(
+        yaml.safe_dump(configured_project), encoding="utf-8"
+    )
+    (tmp_path / "openapi.yaml").write_text(
+        yaml.safe_dump(
+            {
+                "openapi": "3.1.0",
+                "info": {"title": "Local API", "version": "1.0.0"},
+                "paths": {},
+            }
+        ),
+        encoding="utf-8",
+    )
+    calls = []
+
+    def fake_get(url, **kwargs):
+        calls.append(url)
+        assert kwargs["timeout"] == 10
+        return httpx.Response(status, request=httpx.Request("GET", url))
+
+    monkeypatch.setattr("apiguard.openapi.httpx.get", fake_get)
+    assert main(["check", "nexstock"]) == (0 if status == 200 else 1)
+    assert calls == [configured_project["base_url"]]
+    output = capsys.readouterr()
+    assert ("specification is valid" in output.out) if status == 200 else ("HTTP 503" in output.err)
+
+
+def test_missing_local_spec_prevents_network(configured_project, tmp_path, monkeypatch, capsys):
+    configured_project["spec_location"] = "missing.yaml"
+    (tmp_path / "configs" / "nexstock.yaml").write_text(
+        yaml.safe_dump(configured_project), encoding="utf-8"
+    )
+
+    def unexpected_request(*args, **kwargs):
+        pytest.fail("Invalid local specs should stop before connectivity checks.")
+
+    monkeypatch.setattr("apiguard.openapi.httpx.get", unexpected_request)
+    assert main(["check", "nexstock"]) == 2
+    assert "Cannot read specification" in capsys.readouterr().err
+
+
+@pytest.mark.parametrize("command", ["generate", "run", "report"])
+def test_placeholder_commands(command, capsys):
+    assert main([command, "nexstock"]) == 2
+    assert "not implemented" in capsys.readouterr().err
+
+
+def test_invalid_app_name(capsys):
+    assert main(["check", "../outside"]) == 2
+    assert "invalid application name" in capsys.readouterr().err
