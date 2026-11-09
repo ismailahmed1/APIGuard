@@ -1,0 +1,28 @@
+name: nexstock
+base_url: http://127.0.0.1:8000
+spec_location: http://127.0.0.1:8000/openapi.json
+
+timeouts:
+  request_seconds: 10
+  run_seconds: 120
+
+auth:
+  login_path: /api/auth/login
+  token_path: data.access_token
+  roles:
+    admin:
+      email_env: NEXSTOCK_ADMIN_EMAIL
+      password_env: NEXSTOCK_ADMIN_PASSWORD
+    manager:
+      email_env: NEXSTOCK_MANAGER_EMAIL
+      password_env: NEXSTOCK_MANAGER_PASSWORD
+
+reset:
+  command:
+    - docker
+    - compose
+    - -f
+    - apps/nexstock/compose.yaml
+    - run
+    - --rm
+    - reset
