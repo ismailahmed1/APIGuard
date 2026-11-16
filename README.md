@@ -65,9 +65,37 @@ The current `check` command uses the request timeout. Authentication, database r
 
 Keep actual credentials out of tracked configuration files. `.env.example` documents the intended environment-variable names; the current CLI does not automatically load a `.env` file.
 
+## Run NexStock in Docker
+
+Prerequisite: Docker Desktop (Docker Compose v2). From the APIGuard repository root:
+
+```powershell
+docker compose -f apps/nexstock/compose.yaml up --detach --wait api
+```
+
+This builds NexStock from one pinned commit, starts PostgreSQL, loads the seed data and serves the API at `http://127.0.0.1:8000`. The specification is at `http://127.0.0.1:8000/openapi.json`. Stop and delete the environment with `docker compose -f apps/nexstock/compose.yaml down --volumes`.
+
+Restore the seed data at any time, also while the API is running:
+
+```powershell
+docker compose -f apps/nexstock/compose.yaml run --rm reset
+```
+
+This is the `reset.command` in `configs/nexstock.yaml`. Every reset restores the same database contents.
+
+How the environment is made reproducible:
+
+- **Pinned commit:** `apps/nexstock/Dockerfile` builds NexStock commit `616e053ebda66294f5d3532dae4b3d752acc6cb0` (v1: 28 operations, 26 require authentication). The later v2 release has 66 operations.
+- **Pinned dependencies:** NexStock's `requirements.txt` sets only minimum versions. `apps/nexstock/constraints.txt` fixes every installed version. It keeps `bcrypt` at 4.0.1 because `passlib` 1.7.4 cannot hash passwords with `bcrypt` 5. `DATABASE_URL` names the `psycopg2` driver because SQLAlchemy 2.1 otherwise selects `psycopg` 3, which is not installed.
+- **Fixed seed data:** NexStock's seed scripts use random values and the current time, so running them twice gives different data. `apps/nexstock/seed.sql` is a database dump made once from those scripts by `apps/nexstock/make_seed.sh`. The reset service drops the `public` schema and loads this dump. Run `make_seed.sh` (from a POSIX shell such as Git Bash) only when the pinned commit changes, and commit the new `seed.sql`.
+
+The seeded Admin and Manager accounts are defined in NexStock's `backend/scripts/seed_users.py`. Put their email addresses and passwords in the environment variables listed in `.env.example`.
+
+NexStock v1 has known defects, which APIGuard should detect: `GET /api/auth/me` and `GET /api/inventory` return HTTP 500 for every authenticated request.
+
 ## Check NexStock Connectivity
 
-Start the NexStock environment separately, then run from the APIGuard repository root:
+Start the NexStock environment as described above, then run from the APIGuard repository root:
 
 ```powershell
 .\.venv\Scripts\apiguard.exe check nexstock

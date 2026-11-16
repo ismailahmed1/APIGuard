@@ -1,0 +1,44 @@
+name: apiguard-nexstock
+
+x-database: &database
+  POSTGRES_USER: nexstock
+  POSTGRES_PASSWORD: nexstock
+  POSTGRES_DB: nexstock
+
+services:
+  db:
+    image: postgres:16.4-alpine
+    environment: *database
+    healthcheck:
+      test: ["CMD", "pg_isready", "-U", "nexstock", "-d", "nexstock"]
+      interval: 2s
+      retries: 30
+
+  # Restores seed.sql. It runs once before the API starts, and again on demand:
+  #   docker compose -f apps/nexstock/compose.yaml run --rm reset
+  reset:
+    image: postgres:16.4-alpine
+    depends_on:
+      db:
+        condition: service_healthy
+    environment:
+      PGHOST: db
+      PGUSER: nexstock
+      PGPASSWORD: nexstock
+      PGDATABASE: nexstock
+    volumes:
+      - ./seed.sql:/seed.sql:ro
+    command: ["psql", "-v", "ON_ERROR_STOP=1", "--quiet", "-f", "/seed.sql"]
+
+  api:
+    build: .
+    depends_on:
+      reset:
+        condition: service_completed_successfully
+    environment:
+      DATABASE_URL: postgresql+psycopg2://nexstock:nexstock@db:5432/nexstock
+      # Local test value only; this container is not reachable from other computers.
+      SECRET_KEY: apiguard-local-nexstock-test-key-0001
+      CORS_ORIGINS: '["*"]'
+    ports:
+      - "127.0.0.1:8000:8000"
