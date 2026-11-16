@@ -26,9 +26,11 @@ services:
       PGUSER: nexstock
       PGPASSWORD: nexstock
       PGDATABASE: nexstock
+      # Show only warnings and errors, not a notice for every dropped table.
+      PGOPTIONS: "-c client_min_messages=warning"
     volumes:
       - ./seed.sql:/seed.sql:ro
-    command: ["psql", "-v", "ON_ERROR_STOP=1", "--quiet", "-f", "/seed.sql"]
+    command: ["psql", "-v", "ON_ERROR_STOP=1", "--quiet", "--output=/dev/null", "-f", "/seed.sql"]
 
   api:
     build: .
