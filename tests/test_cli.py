@@ -6,6 +6,7 @@ import pytest
 import yaml
 
 from apiguard.cli import main
+from apiguard.openapi import SpecError
 
 
 def test_version_command():
@@ -173,3 +174,73 @@ def test_placeholder_commands(command, capsys):
 def test_invalid_app_name(capsys):
     assert main(["check", "../outside"]) == 2
     assert "invalid application name" in capsys.readouterr().err
+
+
+def test_spec_summary(configured_project, monkeypatch, capsys):
+    from test_operations import DOCUMENT
+
+    def fake_get(url, **kwargs):
+        assert url == configured_project["spec_location"]
+        return httpx.Response(200, json=DOCUMENT, request=httpx.Request("GET", url))
+
+    monkeypatch.setattr("apiguard.openapi.httpx.get", fake_get)
+    assert main(["spec", "nexstock"]) == 0
+    lines = capsys.readouterr().out.splitlines()
+    assert lines[0] == "nexstock: 4 operations, 2 require authentication (OpenAPI 3.1.0)"
+    assert lines[2].split() == ["METHOD", "PATH", "AUTH", "PARAMETERS", "BODY", "RESPONSES"]
+    assert lines[3].split() == ["POST", "/api/auth/login", "none", "-", "Login", "(form)*"] + [
+        "200,",
+        "422",
+    ]
+    assert lines[4].split() == [
+        "GET",
+        "/api/products/{product_id}",
+        "OAuth2PasswordBearer",
+        "path:product_id*,",
+        "query:verbose*",
+        "-",
+        "200",
+    ]
+    assert lines[6].split()[:3] == ["GET", "/api/catalog", "optional:OAuth2PasswordBearer"]
+
+
+def test_spec_does_not_check_base_url(configured_project, tmp_path, monkeypatch, capsys):
+    configured_project["spec_location"] = "openapi.yaml"
+    (tmp_path / "configs" / "nexstock.yaml").write_text(
+        yaml.safe_dump(configured_project), encoding="utf-8"
+    )
+    (tmp_path / "openapi.yaml").write_text(
+        yaml.safe_dump({"openapi": "3.1.0", "info": {"title": "A", "version": "1"}, "paths": {}}),
+        encoding="utf-8",
+    )
+
+    def unexpected_request(*args, **kwargs):
+        pytest.fail("A local spec summary needs no network access.")
+
+    monkeypatch.setattr("apiguard.openapi.httpx.get", unexpected_request)
+    assert main(["spec", "nexstock"]) == 0
+    assert "0 operations" in capsys.readouterr().out
+
+
+def test_spec_reports_unresolvable_reference(configured_project, monkeypatch, capsys):
+    from test_operations import DOCUMENT
+
+    def fake_get(url, **kwargs):
+        return httpx.Response(200, json=DOCUMENT, request=httpx.Request("GET", url))
+
+    def broken(document):
+        raise SpecError("#/components/schemas/Missing: reference target does not exist.")
+
+    monkeypatch.setattr("apiguard.openapi.httpx.get", fake_get)
+    monkeypatch.setattr("apiguard.cli.extract_operations", broken)
+    assert main(["spec", "nexstock"]) == 2
+    assert "Specification error: #/components/schemas/Missing" in capsys.readouterr().err
+
+
+def test_spec_connection_error(configured_project, monkeypatch, capsys):
+    def fake_get(url, **kwargs):
+        raise httpx.ConnectError("down", request=httpx.Request("GET", url))
+
+    monkeypatch.setattr("apiguard.openapi.httpx.get", fake_get)
+    assert main(["spec", "nexstock"]) == 1
+    assert "could not reach" in capsys.readouterr().err
