@@ -33,7 +33,11 @@ services:
     command: ["psql", "-v", "ON_ERROR_STOP=1", "--quiet", "--output=/dev/null", "-f", "/seed.sql"]
 
   api:
-    build: .
+    build:
+      context: .
+      args:
+        NEXSTOCK_FAULT: ${NEXSTOCK_FAULT:-}
+    image: apiguard-nexstock-api:${NEXSTOCK_FAULT:-original}
     depends_on:
       reset:
         condition: service_completed_successfully

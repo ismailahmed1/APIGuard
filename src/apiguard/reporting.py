@@ -1,4 +1,4 @@
-"""Format generated suites, run results and failure categories for the CLI."""
+"""Format run results, failure categories and run comparisons for the CLI."""
 
 from apiguard.validator import TEST_TYPES
 
@@ -72,3 +72,29 @@ def format_run(run, results):
         rows = [(r["id"], r["operation"], r["role"], r["detail"]) for r in in_category]
         lines += ["  " + line for line in table(rows)]
     return "\n".join(lines)
+
+
+def compare_runs(base, base_results, run, results):
+    """Tests that pass in the base run and fail in the other run reveal a new fault."""
+    before = {r["id"]: r for r in base_results}
+    newly_failing = [
+        r
+        for r in results
+        if r["outcome"] != "passed" and before.get(r["id"], {}).get("outcome") == "passed"
+    ]
+    still_failing = [
+        r
+        for r in results
+        if r["outcome"] != "passed" and before.get(r["id"], {}).get("outcome") != "passed"
+    ]
+    name = run.get("label") or run["run_id"]
+    lines = [f"Compared run {run['run_id']} ({name}) with base run {base['run_id']}:"]
+    if newly_failing:
+        lines.append(f"DETECTED: {len(newly_failing)} tests pass on the base run and fail here.")
+        rows = [(r["id"], r["type"], r["operation"], r["detail"]) for r in newly_failing]
+        lines += ["  " + line for line in table(rows)]
+    else:
+        lines.append("NOT DETECTED: no test changed from passed to failed.")
+    if still_failing:
+        lines.append(f"{len(still_failing)} tests also fail on the base run (existing defects).")
+    return "\n".join(lines), bool(newly_failing)

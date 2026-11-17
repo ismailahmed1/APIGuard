@@ -1,0 +1,11 @@
+--- a/backend/app/api/categories.py
++++ b/backend/app/api/categories.py
+@@ -43,7 +43,7 @@
+     )
+ 
+ 
+-@router.post("", response_model=dict, status_code=status.HTTP_201_CREATED)
++@router.post("", response_model=dict, status_code=status.HTTP_200_OK)
+ def create_category(
+     category_in: CategoryCreate,
+     db: Session = Depends(get_db),

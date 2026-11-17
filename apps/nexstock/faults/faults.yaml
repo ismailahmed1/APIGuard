@@ -1,0 +1,10 @@
+# Ground truth for the fault evaluation: the operation that each seeded fault changes.
+- id: F01-products-list-without-auth
+  category: Unauthorized access
+  operation: GET /api/products
+- id: F02-category-create-wrong-status
+  category: Wrong status code
+  operation: POST /api/categories
+- id: F03-product-negative-price-accepted
+  category: Input validation removed
+  operation: POST /api/products
