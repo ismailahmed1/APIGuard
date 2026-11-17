@@ -165,7 +165,14 @@ def test_missing_local_spec_prevents_network(configured_project, tmp_path, monke
     assert "Cannot read specification" in capsys.readouterr().err
 
 
-@pytest.mark.parametrize("command", ["generate", "run", "report"])
+def test_generate_requires_api_key(configured_project, monkeypatch, capsys):
+    monkeypatch.delenv("ANTHROPIC_API_KEY", raising=False)
+    monkeypatch.delenv("ANTHROPIC_AUTH_TOKEN", raising=False)
+    assert main(["generate", "nexstock"]) == 2
+    assert "ANTHROPIC_API_KEY is not set" in capsys.readouterr().err
+
+
+@pytest.mark.parametrize("command", ["run", "report"])
 def test_placeholder_commands(command, capsys):
     assert main([command, "nexstock"]) == 2
     assert "not implemented" in capsys.readouterr().err

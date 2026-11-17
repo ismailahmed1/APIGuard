@@ -1,100 +1,143 @@
 import argparse
+import json
+import os
 import re
 import sys
 from pathlib import Path
 
 import httpx
+from dotenv import load_dotenv
 
 from apiguard import __version__
+from apiguard.ai import AIClient, AIError
 from apiguard.config import ConfigError, load_config
+from apiguard.generator import generate_suite
 from apiguard.openapi import SpecError, get_response, load_spec
 from apiguard.operations import extract_operations
+from apiguard.reporting import format_suite, table
 
 MEDIA_LABELS = {
     "application/json": "json",
     "application/x-www-form-urlencoded": "form",
     "multipart/form-data": "multipart",
 }
+SUITES_DIR = "suites"
+DEFAULT_MODEL = "claude-opus-5-5"
+
+
+class Failure(Exception):
+    """Stop a command with a message and an exit code."""
+
+    def __init__(self, message, code):
+        super().__init__(message)
+        self.code = code
 
 
 def main(argv=None):
     parser = argparse.ArgumentParser(description="Generate and run reusable API tests.")
     parser.add_argument("--version", action="version", version=__version__)
-
     commands = parser.add_subparsers(dest="command", required=True)
 
-    check_parser = commands.add_parser(
-        "check",
-        help="Check configuration, connectivity and the OpenAPI specification.",
-    )
-    check_parser.add_argument("app", help="Application name, such as nexstock.")
+    def command(name, help_text):
+        sub = commands.add_parser(name, help=help_text)
+        sub.add_argument("app", help="Application name, such as nexstock.")
+        return sub
 
-    spec_parser = commands.add_parser(
-        "spec",
-        help="Show a summary of the operations in the OpenAPI specification.",
-    )
-    spec_parser.add_argument("app", help="Application name, such as nexstock.")
-
-    for command in ("generate", "run", "report"):
-        command_parser = commands.add_parser(
-            command,
-            help="Not implemented yet.",
-        )
-        command_parser.add_argument("app")
-
+    command("check", "Check configuration, connectivity and the OpenAPI specification.")
+    command("spec", "Show a summary of the operations in the OpenAPI specification.")
+    generate = command("generate", "Generate and save a test suite with the AI model.")
+    generate.add_argument("--tag", action="append", default=[], help="Only this operation tag.")
+    for name in ("run", "report"):
+        command(name, "Not implemented yet.")
     args = parser.parse_args(argv)
-
-    if args.command not in ("check", "spec"):
-        print(f"Error: '{args.command}' is not implemented yet.", file=sys.stderr)
-        return 2
-
-    if not re.fullmatch(r"[A-Za-z0-9_-]+", args.app):
-        print("Error: invalid application name.", file=sys.stderr)
-        return 2
-
-    config_path = Path("configs") / f"{args.app}.yaml"
-
+    # Credentials and the AI key come from the environment or an untracked .env file.
+    load_dotenv(Path(".env"), override=False)
     try:
-        config = load_config(config_path)
-    except ConfigError as exc:
-        print(f"Configuration error: {exc}", file=sys.stderr)
-        return 2
+        return COMMANDS[args.command](args)
+    except Failure as exc:
+        print(exc, file=sys.stderr)
+        return exc.code
 
+
+def load_app(name):
+    if not re.fullmatch(r"[A-Za-z0-9_-]+", name):
+        raise Failure("Error: invalid application name.", 2)
+    try:
+        return load_config(Path("configs") / f"{name}.yaml")
+    except ConfigError as exc:
+        raise Failure(f"Configuration error: {exc}", 2) from exc
+
+
+def fetch_spec(config, check_base_url=False):
     location = config["spec_location"]
     timeout = config["timeouts"]["request_seconds"]
-
     try:
         spec = load_spec(location, timeout)
         # A remote spec already proves connectivity; local files do not.
-        if args.command == "check" and "://" not in location:
+        if check_base_url and "://" not in location:
             get_response(config["base_url"], timeout)
-        operations = extract_operations(spec.document) if args.command == "spec" else None
+        return spec, extract_operations(spec.document)
     except SpecError as exc:
-        print(f"Specification error: {exc}", file=sys.stderr)
-        return 2
-    except httpx.TimeoutException:
-        print("Connection error: the request timed out.", file=sys.stderr)
-        return 1
+        raise Failure(f"Specification error: {exc}", 2) from exc
+    except httpx.TimeoutException as exc:
+        raise Failure("Connection error: the request timed out.", 1) from exc
     except httpx.HTTPStatusError as exc:
-        print(
-            f"Connection error: server returned HTTP {exc.response.status_code}.",
-            file=sys.stderr,
-        )
-        return 1
-    except httpx.RequestError:
-        print(
+        raise Failure(
+            f"Connection error: server returned HTTP {exc.response.status_code}.", 1
+        ) from exc
+    except httpx.RequestError as exc:
+        raise Failure(
             "Connection error: could not reach the application. "
             "Check that it is running and the configured address is correct.",
-            file=sys.stderr,
-        )
-        return 1
+            1,
+        ) from exc
 
-    if args.command == "spec":
-        print(format_summary(config["name"], spec.document.get("openapi"), operations))
-        return 0
 
+def cmd_check(args):
+    config = load_app(args.app)
+    fetch_spec(config, check_base_url=True)
     print(f"OK: {config['name']} is reachable and its OpenAPI specification is valid.")
     return 0
+
+
+def cmd_spec(args):
+    config = load_app(args.app)
+    spec, operations = fetch_spec(config)
+    print(format_summary(config["name"], spec.document.get("openapi"), operations))
+    return 0
+
+
+def cmd_generate(args):
+    config = load_app(args.app)
+    if not (os.environ.get("ANTHROPIC_API_KEY") or os.environ.get("ANTHROPIC_AUTH_TOKEN")):
+        raise Failure("Configuration error: ANTHROPIC_API_KEY is not set.", 2)
+    settings = config.get("generation", {})
+    context = ""
+    if settings.get("context_file"):
+        try:
+            context = Path(settings["context_file"]).read_text(encoding="utf-8")
+        except OSError as exc:
+            raise Failure(
+                f"Configuration error: cannot read {settings['context_file']}.", 2
+            ) from exc
+    spec, operations = fetch_spec(config)
+    roles = list(config["auth"].get("roles", {}))
+    ai = AIClient(
+        settings.get("model", DEFAULT_MODEL),
+        settings.get("limits", {}),
+        effort=settings.get("effort", "medium"),
+    )
+    print(f"Generating tests with {ai.model} for tags: {', '.join(args.tag) or 'all'} ...")
+    try:
+        directory, metadata = generate_suite(
+            config["name"], spec, operations, args.tag, ai, context, roles, SUITES_DIR
+        )
+    except AIError as exc:
+        raise Failure(f"AI error: {exc}.", 1) from exc
+    excluded = json.loads((directory / "excluded.json").read_text(encoding="utf-8"))
+    print(format_suite(metadata, excluded))
+    print(f"\nSaved to {directory}")
+    return 0 if metadata["counts"]["valid"] else 1
 
 
 def format_summary(name, version, operations):
@@ -116,16 +159,11 @@ def format_summary(name, version, operations):
                 ", ".join(operation.responses) or "-",
             )
         )
-    widths = [max(len(row[column]) for row in rows) for column in range(len(rows[0]) - 1)]
-    lines = [
+    header = (
         f"{name}: {len(operations)} operations, {protected} require authentication"
-        + f" (OpenAPI {version})",
-        "",
-    ]
-    for row in rows:
-        cells = [cell.ljust(width) for cell, width in zip(row, widths)]
-        lines.append("  ".join([*cells, row[-1]]))
-    return "\n".join(lines)
+        + f" (OpenAPI {version})"
+    )
+    return "\n".join([header, "", *table(rows)])
 
 
 def _auth_label(operation):
@@ -144,6 +182,19 @@ def _body_label(body):
         kind = MEDIA_LABELS.get(media_type, media_type)
         labels.append(f"{title} ({kind})" if title else kind)
     return (", ".join(labels) or "empty") + ("*" if body.required else "")
+
+
+def cmd_placeholder(args):
+    raise Failure(f"Error: '{args.command}' is not implemented yet.", 2)
+
+
+COMMANDS = {
+    "check": cmd_check,
+    "spec": cmd_spec,
+    "generate": cmd_generate,
+    "run": cmd_placeholder,
+    "report": cmd_placeholder,
+}
 
 
 if __name__ == "__main__":

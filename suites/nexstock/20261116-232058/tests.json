@@ -1,0 +1,1758 @@
+[
+  {
+    "id": "categories-list-admin-happy",
+    "type": "happy_path",
+    "description": "Admin can list all categories",
+    "method": "GET",
+    "path": "/api/categories",
+    "role": "admin",
+    "path_params": {},
+    "query_params": {},
+    "body": null,
+    "expected_status": 200
+  },
+  {
+    "id": "categories-list-manager-happy",
+    "type": "happy_path",
+    "description": "Manager can list all categories",
+    "method": "GET",
+    "path": "/api/categories",
+    "role": "manager",
+    "path_params": {},
+    "query_params": {},
+    "body": null,
+    "expected_status": 200
+  },
+  {
+    "id": "categories-list-no-token",
+    "type": "authentication",
+    "description": "Listing categories without a token is rejected",
+    "method": "GET",
+    "path": "/api/categories",
+    "role": "anonymous",
+    "path_params": {},
+    "query_params": {},
+    "body": null,
+    "expected_status": 401
+  },
+  {
+    "id": "categories-create-happy",
+    "type": "happy_path",
+    "description": "Admin creates a new category with name and description",
+    "method": "POST",
+    "path": "/api/categories",
+    "role": "admin",
+    "path_params": {},
+    "query_params": {},
+    "body": {
+      "name": "Test Category APIGuard",
+      "description": "Category created by test"
+    },
+    "expected_status": 201
+  },
+  {
+    "id": "categories-create-no-token",
+    "type": "authentication",
+    "description": "Creating a category without a token is rejected",
+    "method": "POST",
+    "path": "/api/categories",
+    "role": "anonymous",
+    "path_params": {},
+    "query_params": {},
+    "body": {
+      "name": "Anonymous Category"
+    },
+    "expected_status": 401
+  },
+  {
+    "id": "categories-create-missing-name",
+    "type": "schema_validation",
+    "description": "Creating a category without the required name fails",
+    "method": "POST",
+    "path": "/api/categories",
+    "role": "admin",
+    "path_params": {},
+    "query_params": {},
+    "body": {
+      "description": "No name given"
+    },
+    "expected_status": 422
+  },
+  {
+    "id": "categories-create-name-wrong-type",
+    "type": "schema_validation",
+    "description": "Creating a category with a non-string name fails",
+    "method": "POST",
+    "path": "/api/categories",
+    "role": "admin",
+    "path_params": {},
+    "query_params": {},
+    "body": {
+      "name": {
+        "value": 123
+      }
+    },
+    "expected_status": 422
+  },
+  {
+    "id": "categories-create-description-wrong-type",
+    "type": "schema_validation",
+    "description": "Creating a category with a non-string description fails",
+    "method": "POST",
+    "path": "/api/categories",
+    "role": "admin",
+    "path_params": {},
+    "query_params": {},
+    "body": {
+      "name": "Bad Description Category",
+      "description": [
+        1,
+        2
+      ]
+    },
+    "expected_status": 422
+  },
+  {
+    "id": "categories-create-description-null",
+    "type": "happy_path",
+    "description": "Creating a category with a null description succeeds",
+    "method": "POST",
+    "path": "/api/categories",
+    "role": "admin",
+    "path_params": {},
+    "query_params": {},
+    "body": {
+      "name": "Null Description Category",
+      "description": null
+    },
+    "expected_status": 201
+  },
+  {
+    "id": "categories-create-name-empty",
+    "type": "boundary_value",
+    "description": "Empty name is below minimum length 1",
+    "method": "POST",
+    "path": "/api/categories",
+    "role": "admin",
+    "path_params": {},
+    "query_params": {},
+    "body": {
+      "name": ""
+    },
+    "expected_status": 422
+  },
+  {
+    "id": "categories-create-name-min",
+    "type": "boundary_value",
+    "description": "Name of exactly 1 character is accepted",
+    "method": "POST",
+    "path": "/api/categories",
+    "role": "admin",
+    "path_params": {},
+    "query_params": {},
+    "body": {
+      "name": "Q"
+    },
+    "expected_status": 201
+  },
+  {
+    "id": "categories-create-name-max",
+    "type": "boundary_value",
+    "description": "Name of exactly 100 characters is accepted",
+    "method": "POST",
+    "path": "/api/categories",
+    "role": "admin",
+    "path_params": {},
+    "query_params": {},
+    "body": {
+      "name": "ABCDEFGHIJABCDEFGHIJABCDEFGHIJABCDEFGHIJABCDEFGHIJABCDEFGHIJABCDEFGHIJABCDEFGHIJABCDEFGHIJABCDEFGHIJ"
+    },
+    "expected_status": 201
+  },
+  {
+    "id": "categories-create-name-too-long",
+    "type": "boundary_value",
+    "description": "Name of 101 characters exceeds maximum length",
+    "method": "POST",
+    "path": "/api/categories",
+    "role": "admin",
+    "path_params": {},
+    "query_params": {},
+    "body": {
+      "name": "ABCDEFGHIJABCDEFGHIJABCDEFGHIJABCDEFGHIJABCDEFGHIJABCDEFGHIJABCDEFGHIJABCDEFGHIJABCDEFGHIJABCDEFGHIJK"
+    },
+    "expected_status": 422
+  },
+  {
+    "id": "categories-create-description-max",
+    "type": "boundary_value",
+    "description": "Description of exactly 255 characters is accepted",
+    "method": "POST",
+    "path": "/api/categories",
+    "role": "admin",
+    "path_params": {},
+    "query_params": {},
+    "body": {
+      "name": "Long Description Category",
+      "description": "abcdefghijabcdefghijabcdefghijabcdefghijabcdefghijabcdefghijabcdefghijabcdefghijabcdefghijabcdefghijabcdefghijabcdefghijabcdefghijabcdefghijabcdefghijabcdefghijabcdefghijabcdefghijabcdefghijabcdefghijabcdefghijabcdefghijabcdefghijabcdefghijabcdefghijabcde"
+    },
+    "expected_status": 201
+  },
+  {
+    "id": "categories-create-description-too-long",
+    "type": "boundary_value",
+    "description": "Description of 256 characters exceeds maximum length",
+    "method": "POST",
+    "path": "/api/categories",
+    "role": "admin",
+    "path_params": {},
+    "query_params": {},
+    "body": {
+      "name": "Too Long Description Category",
+      "description": "abcdefghijabcdefghijabcdefghijabcdefghijabcdefghijabcdefghijabcdefghijabcdefghijabcdefghijabcdefghijabcdefghijabcdefghijabcdefghijabcdefghijabcdefghijabcdefghijabcdefghijabcdefghijabcdefghijabcdefghijabcdefghijabcdefghijabcdefghijabcdefghijabcdefghijabcdef"
+    },
+    "expected_status": 422
+  },
+  {
+    "id": "categories-get-happy",
+    "type": "happy_path",
+    "description": "Admin retrieves category 1 Electronics",
+    "method": "GET",
+    "path": "/api/categories/{category_id}",
+    "role": "admin",
+    "path_params": {
+      "category_id": "1"
+    },
+    "query_params": {},
+    "body": null,
+    "expected_status": 200
+  },
+  {
+    "id": "categories-get-not-found",
+    "type": "happy_path",
+    "description": "Retrieving a nonexistent category returns 404",
+    "method": "GET",
+    "path": "/api/categories/{category_id}",
+    "role": "admin",
+    "path_params": {
+      "category_id": "999"
+    },
+    "query_params": {},
+    "body": null,
+    "expected_status": 404
+  },
+  {
+    "id": "categories-get-invalid-id",
+    "type": "schema_validation",
+    "description": "Non-integer category id is rejected",
+    "method": "GET",
+    "path": "/api/categories/{category_id}",
+    "role": "admin",
+    "path_params": {
+      "category_id": "abc"
+    },
+    "query_params": {},
+    "body": null,
+    "expected_status": 422
+  },
+  {
+    "id": "categories-get-no-token",
+    "type": "authentication",
+    "description": "Retrieving a category without a token is rejected",
+    "method": "GET",
+    "path": "/api/categories/{category_id}",
+    "role": "anonymous",
+    "path_params": {
+      "category_id": "1"
+    },
+    "query_params": {},
+    "body": null,
+    "expected_status": 401
+  },
+  {
+    "id": "categories-update-happy",
+    "type": "happy_path",
+    "description": "Admin updates name and description of category 1",
+    "method": "PUT",
+    "path": "/api/categories/{category_id}",
+    "role": "admin",
+    "path_params": {
+      "category_id": "1"
+    },
+    "query_params": {},
+    "body": {
+      "name": "Electronics Updated",
+      "description": "Updated by test"
+    },
+    "expected_status": 200
+  },
+  {
+    "id": "categories-update-no-token",
+    "type": "authentication",
+    "description": "Updating a category without a token is rejected",
+    "method": "PUT",
+    "path": "/api/categories/{category_id}",
+    "role": "anonymous",
+    "path_params": {
+      "category_id": "1"
+    },
+    "query_params": {},
+    "body": {
+      "description": "Anonymous update"
+    },
+    "expected_status": 401
+  },
+  {
+    "id": "categories-update-not-found",
+    "type": "happy_path",
+    "description": "Updating a nonexistent category returns 404",
+    "method": "PUT",
+    "path": "/api/categories/{category_id}",
+    "role": "admin",
+    "path_params": {
+      "category_id": "999"
+    },
+    "query_params": {},
+    "body": {
+      "description": "Does not exist"
+    },
+    "expected_status": 404
+  },
+  {
+    "id": "categories-update-invalid-id",
+    "type": "schema_validation",
+    "description": "Updating with a non-integer category id is rejected",
+    "method": "PUT",
+    "path": "/api/categories/{category_id}",
+    "role": "admin",
+    "path_params": {
+      "category_id": "abc"
+    },
+    "query_params": {},
+    "body": {
+      "description": "Invalid id"
+    },
+    "expected_status": 422
+  },
+  {
+    "id": "categories-update-name-wrong-type",
+    "type": "schema_validation",
+    "description": "Updating with a non-string name is rejected",
+    "method": "PUT",
+    "path": "/api/categories/{category_id}",
+    "role": "admin",
+    "path_params": {
+      "category_id": "2"
+    },
+    "query_params": {},
+    "body": {
+      "name": [
+        "Raw"
+      ]
+    },
+    "expected_status": 422
+  },
+  {
+    "id": "categories-update-name-empty",
+    "type": "boundary_value",
+    "description": "Updating with an empty name is below minimum length",
+    "method": "PUT",
+    "path": "/api/categories/{category_id}",
+    "role": "admin",
+    "path_params": {
+      "category_id": "2"
+    },
+    "query_params": {},
+    "body": {
+      "name": ""
+    },
+    "expected_status": 422
+  },
+  {
+    "id": "categories-update-name-max",
+    "type": "boundary_value",
+    "description": "Updating with a 100-character name is accepted",
+    "method": "PUT",
+    "path": "/api/categories/{category_id}",
+    "role": "admin",
+    "path_params": {
+      "category_id": "2"
+    },
+    "query_params": {},
+    "body": {
+      "name": "ABCDEFGHIJABCDEFGHIJABCDEFGHIJABCDEFGHIJABCDEFGHIJABCDEFGHIJABCDEFGHIJABCDEFGHIJABCDEFGHIJABCDEFGHIJ"
+    },
+    "expected_status": 200
+  },
+  {
+    "id": "categories-update-name-too-long",
+    "type": "boundary_value",
+    "description": "Updating with a 101-character name is rejected",
+    "method": "PUT",
+    "path": "/api/categories/{category_id}",
+    "role": "admin",
+    "path_params": {
+      "category_id": "2"
+    },
+    "query_params": {},
+    "body": {
+      "name": "ABCDEFGHIJABCDEFGHIJABCDEFGHIJABCDEFGHIJABCDEFGHIJABCDEFGHIJABCDEFGHIJABCDEFGHIJABCDEFGHIJABCDEFGHIJK"
+    },
+    "expected_status": 422
+  },
+  {
+    "id": "categories-update-description-too-long",
+    "type": "boundary_value",
+    "description": "Updating with a 256-character description is rejected",
+    "method": "PUT",
+    "path": "/api/categories/{category_id}",
+    "role": "admin",
+    "path_params": {
+      "category_id": "3"
+    },
+    "query_params": {},
+    "body": {
+      "description": "abcdefghijabcdefghijabcdefghijabcdefghijabcdefghijabcdefghijabcdefghijabcdefghijabcdefghijabcdefghijabcdefghijabcdefghijabcdefghijabcdefghijabcdefghijabcdefghijabcdefghijabcdefghijabcdefghijabcdefghijabcdefghijabcdefghijabcdefghijabcdefghijabcdefghijabcdef"
+    },
+    "expected_status": 422
+  },
+  {
+    "id": "categories-delete-happy",
+    "type": "happy_path",
+    "description": "Admin deletes category 10 Consumables",
+    "method": "DELETE",
+    "path": "/api/categories/{category_id}",
+    "role": "admin",
+    "path_params": {
+      "category_id": "10"
+    },
+    "query_params": {},
+    "body": null,
+    "expected_status": 200
+  },
+  {
+    "id": "categories-delete-no-token",
+    "type": "authentication",
+    "description": "Deleting a category without a token is rejected",
+    "method": "DELETE",
+    "path": "/api/categories/{category_id}",
+    "role": "anonymous",
+    "path_params": {
+      "category_id": "10"
+    },
+    "query_params": {},
+    "body": null,
+    "expected_status": 401
+  },
+  {
+    "id": "categories-delete-not-found",
+    "type": "happy_path",
+    "description": "Deleting a nonexistent category returns 404",
+    "method": "DELETE",
+    "path": "/api/categories/{category_id}",
+    "role": "admin",
+    "path_params": {
+      "category_id": "999"
+    },
+    "query_params": {},
+    "body": null,
+    "expected_status": 404
+  },
+  {
+    "id": "categories-delete-invalid-id",
+    "type": "schema_validation",
+    "description": "Deleting with a non-integer category id is rejected",
+    "method": "DELETE",
+    "path": "/api/categories/{category_id}",
+    "role": "admin",
+    "path_params": {
+      "category_id": "abc"
+    },
+    "query_params": {},
+    "body": null,
+    "expected_status": 422
+  },
+  {
+    "id": "products-list-happy-admin",
+    "type": "happy_path",
+    "description": "Admin lists all products",
+    "method": "GET",
+    "path": "/api/products",
+    "role": "admin",
+    "path_params": {},
+    "query_params": {},
+    "body": null,
+    "expected_status": 200
+  },
+  {
+    "id": "products-list-happy-filter-manager",
+    "type": "happy_path",
+    "description": "Manager lists products filtered by existing category 1",
+    "method": "GET",
+    "path": "/api/products",
+    "role": "manager",
+    "path_params": {},
+    "query_params": {
+      "category_id": "1"
+    },
+    "body": null,
+    "expected_status": 200
+  },
+  {
+    "id": "products-list-invalid-category-type",
+    "type": "schema_validation",
+    "description": "Non-integer category_id query parameter is rejected",
+    "method": "GET",
+    "path": "/api/products",
+    "role": "admin",
+    "path_params": {},
+    "query_params": {
+      "category_id": "abc"
+    },
+    "body": null,
+    "expected_status": 422
+  },
+  {
+    "id": "products-list-no-token",
+    "type": "authentication",
+    "description": "Listing products without a token is rejected",
+    "method": "GET",
+    "path": "/api/products",
+    "role": "anonymous",
+    "path_params": {},
+    "query_params": {},
+    "body": null,
+    "expected_status": 401
+  },
+  {
+    "id": "products-create-happy-admin",
+    "type": "happy_path",
+    "description": "Admin creates a valid product in category 1",
+    "method": "POST",
+    "path": "/api/products",
+    "role": "admin",
+    "path_params": {},
+    "query_params": {},
+    "body": {
+      "sku": "NEWT-001",
+      "name": "New Test Product",
+      "description": "Created by test",
+      "category_id": 1,
+      "unit_price": 19.99,
+      "minimum_quantity": 5,
+      "maximum_quantity": 100
+    },
+    "expected_status": 201
+  },
+  {
+    "id": "products-create-missing-sku",
+    "type": "schema_validation",
+    "description": "Creating a product without required sku is rejected",
+    "method": "POST",
+    "path": "/api/products",
+    "role": "admin",
+    "path_params": {},
+    "query_params": {},
+    "body": {
+      "name": "No Sku Product",
+      "category_id": 1,
+      "unit_price": 10.5
+    },
+    "expected_status": 422
+  },
+  {
+    "id": "products-create-missing-name",
+    "type": "schema_validation",
+    "description": "Creating a product without required name is rejected",
+    "method": "POST",
+    "path": "/api/products",
+    "role": "admin",
+    "path_params": {},
+    "query_params": {},
+    "body": {
+      "sku": "NEWT-002",
+      "category_id": 1,
+      "unit_price": 10.5
+    },
+    "expected_status": 422
+  },
+  {
+    "id": "products-create-category-wrong-type",
+    "type": "schema_validation",
+    "description": "Non-integer category_id in body is rejected",
+    "method": "POST",
+    "path": "/api/products",
+    "role": "admin",
+    "path_params": {},
+    "query_params": {},
+    "body": {
+      "sku": "NEWT-003",
+      "name": "Bad Category",
+      "category_id": "abc",
+      "unit_price": 10.5
+    },
+    "expected_status": 422
+  },
+  {
+    "id": "products-create-empty-body",
+    "type": "schema_validation",
+    "description": "Empty JSON object missing all required fields is rejected",
+    "method": "POST",
+    "path": "/api/products",
+    "role": "admin",
+    "path_params": {},
+    "query_params": {},
+    "body": {},
+    "expected_status": 422
+  },
+  {
+    "id": "products-create-sku-too-short",
+    "type": "boundary_value",
+    "description": "SKU of 2 characters (below minLength 3) is rejected",
+    "method": "POST",
+    "path": "/api/products",
+    "role": "admin",
+    "path_params": {},
+    "query_params": {},
+    "body": {
+      "sku": "AB",
+      "name": "Short Sku",
+      "category_id": 1,
+      "unit_price": 10.5
+    },
+    "expected_status": 422
+  },
+  {
+    "id": "products-create-sku-min-length",
+    "type": "boundary_value",
+    "description": "SKU of exactly 3 characters is accepted",
+    "method": "POST",
+    "path": "/api/products",
+    "role": "admin",
+    "path_params": {},
+    "query_params": {},
+    "body": {
+      "sku": "XYZ",
+      "name": "Min Sku",
+      "category_id": 1,
+      "unit_price": 10.5
+    },
+    "expected_status": 201
+  },
+  {
+    "id": "products-create-sku-max-length",
+    "type": "boundary_value",
+    "description": "SKU of exactly 50 characters is accepted",
+    "method": "POST",
+    "path": "/api/products",
+    "role": "admin",
+    "path_params": {},
+    "query_params": {},
+    "body": {
+      "sku": "AAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAA",
+      "name": "Max Sku",
+      "category_id": 1,
+      "unit_price": 10.5
+    },
+    "expected_status": 201
+  },
+  {
+    "id": "products-create-sku-too-long",
+    "type": "boundary_value",
+    "description": "SKU of 51 characters is rejected",
+    "method": "POST",
+    "path": "/api/products",
+    "role": "admin",
+    "path_params": {},
+    "query_params": {},
+    "body": {
+      "sku": "AAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAA",
+      "name": "Long Sku",
+      "category_id": 1,
+      "unit_price": 10.5
+    },
+    "expected_status": 422
+  },
+  {
+    "id": "products-create-name-empty",
+    "type": "boundary_value",
+    "description": "Empty name (below minLength 1) is rejected",
+    "method": "POST",
+    "path": "/api/products",
+    "role": "admin",
+    "path_params": {},
+    "query_params": {},
+    "body": {
+      "sku": "NEWT-004",
+      "name": "",
+      "category_id": 1,
+      "unit_price": 10.5
+    },
+    "expected_status": 422
+  },
+  {
+    "id": "products-create-name-max-length",
+    "type": "boundary_value",
+    "description": "Name of exactly 100 characters is accepted",
+    "method": "POST",
+    "path": "/api/products",
+    "role": "admin",
+    "path_params": {},
+    "query_params": {},
+    "body": {
+      "sku": "NEWT-005",
+      "name": "NNNNNNNNNNNNNNNNNNNNNNNNNNNNNNNNNNNNNNNNNNNNNNNNNNNNNNNNNNNNNNNNNNNNNNNNNNNNNNNNNNNNNNNNNNNNNNNNNNNN",
+      "category_id": 1,
+      "unit_price": 10.5
+    },
+    "expected_status": 201
+  },
+  {
+    "id": "products-create-name-too-long",
+    "type": "boundary_value",
+    "description": "Name of 101 characters is rejected",
+    "method": "POST",
+    "path": "/api/products",
+    "role": "admin",
+    "path_params": {},
+    "query_params": {},
+    "body": {
+      "sku": "NEWT-006",
+      "name": "NNNNNNNNNNNNNNNNNNNNNNNNNNNNNNNNNNNNNNNNNNNNNNNNNNNNNNNNNNNNNNNNNNNNNNNNNNNNNNNNNNNNNNNNNNNNNNNNNNNNN",
+      "category_id": 1,
+      "unit_price": 10.5
+    },
+    "expected_status": 422
+  },
+  {
+    "id": "products-create-description-too-long",
+    "type": "boundary_value",
+    "description": "Description of 256 characters is rejected",
+    "method": "POST",
+    "path": "/api/products",
+    "role": "admin",
+    "path_params": {},
+    "query_params": {},
+    "body": {
+      "sku": "NEWT-007",
+      "name": "Long Desc",
+      "description": "DDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDD",
+      "category_id": 1,
+      "unit_price": 10.5
+    },
+    "expected_status": 422
+  },
+  {
+    "id": "products-create-price-zero",
+    "type": "boundary_value",
+    "description": "Unit price of 0 (not greater than zero) is rejected",
+    "method": "POST",
+    "path": "/api/products",
+    "role": "admin",
+    "path_params": {},
+    "query_params": {},
+    "body": {
+      "sku": "NEWT-008",
+      "name": "Zero Price",
+      "category_id": 1,
+      "unit_price": 0
+    },
+    "expected_status": 422
+  },
+  {
+    "id": "products-create-price-just-above-zero",
+    "type": "boundary_value",
+    "description": "Unit price of 0.01 is accepted",
+    "method": "POST",
+    "path": "/api/products",
+    "role": "admin",
+    "path_params": {},
+    "query_params": {},
+    "body": {
+      "sku": "NEWT-009",
+      "name": "Cheap Product",
+      "category_id": 1,
+      "unit_price": 0.01
+    },
+    "expected_status": 201
+  },
+  {
+    "id": "products-create-min-qty-negative",
+    "type": "boundary_value",
+    "description": "Negative minimum_quantity is rejected",
+    "method": "POST",
+    "path": "/api/products",
+    "role": "admin",
+    "path_params": {},
+    "query_params": {},
+    "body": {
+      "sku": "NEWT-010",
+      "name": "Neg Min",
+      "category_id": 1,
+      "unit_price": 10.5,
+      "minimum_quantity": -1
+    },
+    "expected_status": 422
+  },
+  {
+    "id": "products-create-no-token",
+    "type": "authentication",
+    "description": "Creating a product without a token is rejected",
+    "method": "POST",
+    "path": "/api/products",
+    "role": "anonymous",
+    "path_params": {},
+    "query_params": {},
+    "body": {
+      "sku": "NEWT-011",
+      "name": "Anon Product",
+      "category_id": 1,
+      "unit_price": 10.5
+    },
+    "expected_status": 401
+  },
+  {
+    "id": "products-get-happy",
+    "type": "happy_path",
+    "description": "Manager retrieves product 1",
+    "method": "GET",
+    "path": "/api/products/{product_id}",
+    "role": "manager",
+    "path_params": {
+      "product_id": "1"
+    },
+    "query_params": {},
+    "body": null,
+    "expected_status": 200
+  },
+  {
+    "id": "products-get-not-found",
+    "type": "happy_path",
+    "description": "Retrieving non-existent product 999 returns 404",
+    "method": "GET",
+    "path": "/api/products/{product_id}",
+    "role": "admin",
+    "path_params": {
+      "product_id": "999"
+    },
+    "query_params": {},
+    "body": null,
+    "expected_status": 404
+  },
+  {
+    "id": "products-get-invalid-id",
+    "type": "schema_validation",
+    "description": "Non-integer product_id is rejected",
+    "method": "GET",
+    "path": "/api/products/{product_id}",
+    "role": "admin",
+    "path_params": {
+      "product_id": "abc"
+    },
+    "query_params": {},
+    "body": null,
+    "expected_status": 422
+  },
+  {
+    "id": "products-get-no-token",
+    "type": "authentication",
+    "description": "Retrieving a product without a token is rejected",
+    "method": "GET",
+    "path": "/api/products/{product_id}",
+    "role": "anonymous",
+    "path_params": {
+      "product_id": "1"
+    },
+    "query_params": {},
+    "body": null,
+    "expected_status": 401
+  },
+  {
+    "id": "products-update-happy",
+    "type": "happy_path",
+    "description": "Admin updates name and price of product 1",
+    "method": "PUT",
+    "path": "/api/products/{product_id}",
+    "role": "admin",
+    "path_params": {
+      "product_id": "1"
+    },
+    "query_params": {},
+    "body": {
+      "name": "Electronics Item 1 Updated",
+      "unit_price": 25.5
+    },
+    "expected_status": 200
+  },
+  {
+    "id": "products-update-not-found",
+    "type": "happy_path",
+    "description": "Updating non-existent product 999 returns 404",
+    "method": "PUT",
+    "path": "/api/products/{product_id}",
+    "role": "admin",
+    "path_params": {
+      "product_id": "999"
+    },
+    "query_params": {},
+    "body": {
+      "name": "Ghost"
+    },
+    "expected_status": 404
+  },
+  {
+    "id": "products-update-invalid-id",
+    "type": "schema_validation",
+    "description": "Non-integer product_id on update is rejected",
+    "method": "PUT",
+    "path": "/api/products/{product_id}",
+    "role": "admin",
+    "path_params": {
+      "product_id": "abc"
+    },
+    "query_params": {},
+    "body": {
+      "name": "Bad Id"
+    },
+    "expected_status": 422
+  },
+  {
+    "id": "products-update-category-wrong-type",
+    "type": "schema_validation",
+    "description": "Non-integer category_id on update is rejected",
+    "method": "PUT",
+    "path": "/api/products/{product_id}",
+    "role": "admin",
+    "path_params": {
+      "product_id": "1"
+    },
+    "query_params": {},
+    "body": {
+      "category_id": "abc"
+    },
+    "expected_status": 422
+  },
+  {
+    "id": "products-update-sku-too-short",
+    "type": "boundary_value",
+    "description": "Updating SKU to 2 characters is rejected",
+    "method": "PUT",
+    "path": "/api/products/{product_id}",
+    "role": "admin",
+    "path_params": {
+      "product_id": "1"
+    },
+    "query_params": {},
+    "body": {
+      "sku": "AB"
+    },
+    "expected_status": 422
+  },
+  {
+    "id": "products-update-sku-min-length",
+    "type": "boundary_value",
+    "description": "Updating SKU to exactly 3 characters is accepted",
+    "method": "PUT",
+    "path": "/api/products/{product_id}",
+    "role": "admin",
+    "path_params": {
+      "product_id": "1"
+    },
+    "query_params": {},
+    "body": {
+      "sku": "XYZ"
+    },
+    "expected_status": 200
+  },
+  {
+    "id": "products-update-name-empty",
+    "type": "boundary_value",
+    "description": "Updating name to empty string is rejected",
+    "method": "PUT",
+    "path": "/api/products/{product_id}",
+    "role": "admin",
+    "path_params": {
+      "product_id": "1"
+    },
+    "query_params": {},
+    "body": {
+      "name": ""
+    },
+    "expected_status": 422
+  },
+  {
+    "id": "products-update-price-zero",
+    "type": "boundary_value",
+    "description": "Updating unit price to 0 is rejected",
+    "method": "PUT",
+    "path": "/api/products/{product_id}",
+    "role": "admin",
+    "path_params": {
+      "product_id": "1"
+    },
+    "query_params": {},
+    "body": {
+      "unit_price": 0
+    },
+    "expected_status": 422
+  },
+  {
+    "id": "products-update-max-qty-negative",
+    "type": "boundary_value",
+    "description": "Updating maximum_quantity to -1 is rejected",
+    "method": "PUT",
+    "path": "/api/products/{product_id}",
+    "role": "admin",
+    "path_params": {
+      "product_id": "1"
+    },
+    "query_params": {},
+    "body": {
+      "maximum_quantity": -1
+    },
+    "expected_status": 422
+  },
+  {
+    "id": "products-update-no-token",
+    "type": "authentication",
+    "description": "Updating a product without a token is rejected",
+    "method": "PUT",
+    "path": "/api/products/{product_id}",
+    "role": "anonymous",
+    "path_params": {
+      "product_id": "1"
+    },
+    "query_params": {},
+    "body": {
+      "name": "Anon Update"
+    },
+    "expected_status": 401
+  },
+  {
+    "id": "products-delete-happy",
+    "type": "happy_path",
+    "description": "Admin deletes product 1",
+    "method": "DELETE",
+    "path": "/api/products/{product_id}",
+    "role": "admin",
+    "path_params": {
+      "product_id": "1"
+    },
+    "query_params": {},
+    "body": null,
+    "expected_status": 200
+  },
+  {
+    "id": "products-delete-not-found",
+    "type": "happy_path",
+    "description": "Deleting non-existent product 999 returns 404",
+    "method": "DELETE",
+    "path": "/api/products/{product_id}",
+    "role": "admin",
+    "path_params": {
+      "product_id": "999"
+    },
+    "query_params": {},
+    "body": null,
+    "expected_status": 404
+  },
+  {
+    "id": "products-delete-invalid-id",
+    "type": "schema_validation",
+    "description": "Non-integer product_id on delete is rejected",
+    "method": "DELETE",
+    "path": "/api/products/{product_id}",
+    "role": "admin",
+    "path_params": {
+      "product_id": "abc"
+    },
+    "query_params": {},
+    "body": null,
+    "expected_status": 422
+  },
+  {
+    "id": "products-delete-no-token",
+    "type": "authentication",
+    "description": "Deleting a product without a token is rejected",
+    "method": "DELETE",
+    "path": "/api/products/{product_id}",
+    "role": "anonymous",
+    "path_params": {
+      "product_id": "1"
+    },
+    "query_params": {},
+    "body": null,
+    "expected_status": 401
+  },
+  {
+    "id": "inventory-list-happy-admin",
+    "type": "happy_path",
+    "description": "Admin can list inventory records",
+    "method": "GET",
+    "path": "/api/inventory",
+    "role": "admin",
+    "path_params": {},
+    "query_params": {},
+    "body": null,
+    "expected_status": 200
+  },
+  {
+    "id": "inventory-list-happy-manager",
+    "type": "happy_path",
+    "description": "Manager can list inventory records",
+    "method": "GET",
+    "path": "/api/inventory",
+    "role": "manager",
+    "path_params": {},
+    "query_params": {},
+    "body": null,
+    "expected_status": 200
+  },
+  {
+    "id": "inventory-list-auth-anonymous",
+    "type": "authentication",
+    "description": "Listing inventory without a token is rejected",
+    "method": "GET",
+    "path": "/api/inventory",
+    "role": "anonymous",
+    "path_params": {},
+    "query_params": {},
+    "body": null,
+    "expected_status": 401
+  },
+  {
+    "id": "inventory-movements-happy-all",
+    "type": "happy_path",
+    "description": "Admin can list all stock movements without filters",
+    "method": "GET",
+    "path": "/api/inventory/movements",
+    "role": "admin",
+    "path_params": {},
+    "query_params": {},
+    "body": null,
+    "expected_status": 200
+  },
+  {
+    "id": "inventory-movements-happy-filtered",
+    "type": "happy_path",
+    "description": "Manager can filter stock movements by product 1 and type IN",
+    "method": "GET",
+    "path": "/api/inventory/movements",
+    "role": "manager",
+    "path_params": {},
+    "query_params": {
+      "product_id": "1",
+      "type": "IN"
+    },
+    "body": null,
+    "expected_status": 200
+  },
+  {
+    "id": "inventory-movements-happy-date-range",
+    "type": "happy_path",
+    "description": "Filtering stock movements by a valid date range succeeds",
+    "method": "GET",
+    "path": "/api/inventory/movements",
+    "role": "admin",
+    "path_params": {},
+    "query_params": {
+      "from_date": "2020-01-01",
+      "to_date": "2030-12-31"
+    },
+    "body": null,
+    "expected_status": 200
+  },
+  {
+    "id": "inventory-movements-schema-invalid-type",
+    "type": "schema_validation",
+    "description": "Movement type outside the IN/OUT enum is rejected",
+    "method": "GET",
+    "path": "/api/inventory/movements",
+    "role": "admin",
+    "path_params": {},
+    "query_params": {
+      "type": "TRANSFER"
+    },
+    "body": null,
+    "expected_status": 422
+  },
+  {
+    "id": "inventory-movements-schema-invalid-date",
+    "type": "schema_validation",
+    "description": "Non-date from_date value is rejected",
+    "method": "GET",
+    "path": "/api/inventory/movements",
+    "role": "admin",
+    "path_params": {},
+    "query_params": {
+      "from_date": "not-a-date"
+    },
+    "body": null,
+    "expected_status": 422
+  },
+  {
+    "id": "inventory-movements-schema-invalid-product-id",
+    "type": "schema_validation",
+    "description": "Non-integer product_id filter is rejected",
+    "method": "GET",
+    "path": "/api/inventory/movements",
+    "role": "admin",
+    "path_params": {},
+    "query_params": {
+      "product_id": "abc"
+    },
+    "body": null,
+    "expected_status": 422
+  },
+  {
+    "id": "inventory-movements-auth-anonymous",
+    "type": "authentication",
+    "description": "Listing stock movements without a token is rejected",
+    "method": "GET",
+    "path": "/api/inventory/movements",
+    "role": "anonymous",
+    "path_params": {},
+    "query_params": {},
+    "body": null,
+    "expected_status": 401
+  },
+  {
+    "id": "inventory-detail-happy",
+    "type": "happy_path",
+    "description": "Admin can get the inventory detail of product 1",
+    "method": "GET",
+    "path": "/api/inventory/{product_id}",
+    "role": "admin",
+    "path_params": {
+      "product_id": "1"
+    },
+    "query_params": {},
+    "body": null,
+    "expected_status": 200
+  },
+  {
+    "id": "inventory-detail-not-found",
+    "type": "happy_path",
+    "description": "Inventory detail of a non-existent product returns 404",
+    "method": "GET",
+    "path": "/api/inventory/{product_id}",
+    "role": "admin",
+    "path_params": {
+      "product_id": "999"
+    },
+    "query_params": {},
+    "body": null,
+    "expected_status": 404
+  },
+  {
+    "id": "inventory-detail-schema-invalid-id",
+    "type": "schema_validation",
+    "description": "Non-integer product_id path parameter is rejected",
+    "method": "GET",
+    "path": "/api/inventory/{product_id}",
+    "role": "admin",
+    "path_params": {
+      "product_id": "abc"
+    },
+    "query_params": {},
+    "body": null,
+    "expected_status": 422
+  },
+  {
+    "id": "inventory-detail-auth-anonymous",
+    "type": "authentication",
+    "description": "Getting inventory detail without a token is rejected",
+    "method": "GET",
+    "path": "/api/inventory/{product_id}",
+    "role": "anonymous",
+    "path_params": {
+      "product_id": "1"
+    },
+    "query_params": {},
+    "body": null,
+    "expected_status": 401
+  },
+  {
+    "id": "inventory-stockin-happy",
+    "type": "happy_path",
+    "description": "Admin can stock in 10 units of product 1 with remarks",
+    "method": "POST",
+    "path": "/api/inventory/stock-in",
+    "role": "admin",
+    "path_params": {},
+    "query_params": {},
+    "body": {
+      "product_id": 1,
+      "quantity": 10,
+      "remarks": "Supplier delivery"
+    },
+    "expected_status": 200
+  },
+  {
+    "id": "inventory-stockin-happy-manager",
+    "type": "happy_path",
+    "description": "Manager can stock in units of product 2 without remarks",
+    "method": "POST",
+    "path": "/api/inventory/stock-in",
+    "role": "manager",
+    "path_params": {},
+    "query_params": {},
+    "body": {
+      "product_id": 2,
+      "quantity": 5
+    },
+    "expected_status": 200
+  },
+  {
+    "id": "inventory-stockin-schema-missing-quantity",
+    "type": "schema_validation",
+    "description": "Stock in without required quantity is rejected",
+    "method": "POST",
+    "path": "/api/inventory/stock-in",
+    "role": "admin",
+    "path_params": {},
+    "query_params": {},
+    "body": {
+      "product_id": 1
+    },
+    "expected_status": 422
+  },
+  {
+    "id": "inventory-stockin-schema-missing-product",
+    "type": "schema_validation",
+    "description": "Stock in without required product_id is rejected",
+    "method": "POST",
+    "path": "/api/inventory/stock-in",
+    "role": "admin",
+    "path_params": {},
+    "query_params": {},
+    "body": {
+      "quantity": 10
+    },
+    "expected_status": 422
+  },
+  {
+    "id": "inventory-stockin-schema-wrong-type",
+    "type": "schema_validation",
+    "description": "Stock in with a non-integer quantity is rejected",
+    "method": "POST",
+    "path": "/api/inventory/stock-in",
+    "role": "admin",
+    "path_params": {},
+    "query_params": {},
+    "body": {
+      "product_id": 1,
+      "quantity": "ten"
+    },
+    "expected_status": 422
+  },
+  {
+    "id": "inventory-stockin-boundary-quantity-1",
+    "type": "boundary_value",
+    "description": "Stock in with the smallest valid quantity 1 succeeds",
+    "method": "POST",
+    "path": "/api/inventory/stock-in",
+    "role": "admin",
+    "path_params": {},
+    "query_params": {},
+    "body": {
+      "product_id": 1,
+      "quantity": 1
+    },
+    "expected_status": 200
+  },
+  {
+    "id": "inventory-stockin-boundary-quantity-0",
+    "type": "boundary_value",
+    "description": "Stock in with quantity 0 is rejected",
+    "method": "POST",
+    "path": "/api/inventory/stock-in",
+    "role": "admin",
+    "path_params": {},
+    "query_params": {},
+    "body": {
+      "product_id": 1,
+      "quantity": 0
+    },
+    "expected_status": 422
+  },
+  {
+    "id": "inventory-stockin-boundary-remarks-255",
+    "type": "boundary_value",
+    "description": "Stock in with remarks of exactly 255 characters succeeds",
+    "method": "POST",
+    "path": "/api/inventory/stock-in",
+    "role": "admin",
+    "path_params": {},
+    "query_params": {},
+    "body": {
+      "product_id": 1,
+      "quantity": 3,
+      "remarks": "012345678901234567890123456789012345678901234567890123456789012345678901234567890123456789012345678901234567890123456789012345678901234567890123456789012345678901234567890123456789012345678901234567890123456789012345678901234567890123456789012345678901234"
+    },
+    "expected_status": 200
+  },
+  {
+    "id": "inventory-stockin-boundary-remarks-256",
+    "type": "boundary_value",
+    "description": "Stock in with remarks of 256 characters is rejected",
+    "method": "POST",
+    "path": "/api/inventory/stock-in",
+    "role": "admin",
+    "path_params": {},
+    "query_params": {},
+    "body": {
+      "product_id": 1,
+      "quantity": 3,
+      "remarks": "0123456789012345678901234567890123456789012345678901234567890123456789012345678901234567890123456789012345678901234567890123456789012345678901234567890123456789012345678901234567890123456789012345678901234567890123456789012345678901234567890123456789012345"
+    },
+    "expected_status": 422
+  },
+  {
+    "id": "inventory-stockin-auth-anonymous",
+    "type": "authentication",
+    "description": "Stock in without a token is rejected",
+    "method": "POST",
+    "path": "/api/inventory/stock-in",
+    "role": "anonymous",
+    "path_params": {},
+    "query_params": {},
+    "body": {
+      "product_id": 1,
+      "quantity": 10
+    },
+    "expected_status": 401
+  },
+  {
+    "id": "inventory-stockout-happy",
+    "type": "happy_path",
+    "description": "Admin can stock out 5 units of product 1 which has 168 in stock",
+    "method": "POST",
+    "path": "/api/inventory/stock-out",
+    "role": "admin",
+    "path_params": {},
+    "query_params": {},
+    "body": {
+      "product_id": 1,
+      "quantity": 5,
+      "remarks": "Customer order"
+    },
+    "expected_status": 200
+  },
+  {
+    "id": "inventory-stockout-happy-manager",
+    "type": "happy_path",
+    "description": "Manager can stock out 1 unit of product 1",
+    "method": "POST",
+    "path": "/api/inventory/stock-out",
+    "role": "manager",
+    "path_params": {},
+    "query_params": {},
+    "body": {
+      "product_id": 1,
+      "quantity": 1
+    },
+    "expected_status": 200
+  },
+  {
+    "id": "inventory-stockout-schema-missing-quantity",
+    "type": "schema_validation",
+    "description": "Stock out without required quantity is rejected",
+    "method": "POST",
+    "path": "/api/inventory/stock-out",
+    "role": "admin",
+    "path_params": {},
+    "query_params": {},
+    "body": {
+      "product_id": 1
+    },
+    "expected_status": 422
+  },
+  {
+    "id": "inventory-stockout-schema-missing-product",
+    "type": "schema_validation",
+    "description": "Stock out without required product_id is rejected",
+    "method": "POST",
+    "path": "/api/inventory/stock-out",
+    "role": "admin",
+    "path_params": {},
+    "query_params": {},
+    "body": {
+      "quantity": 1
+    },
+    "expected_status": 422
+  },
+  {
+    "id": "inventory-stockout-schema-wrong-type",
+    "type": "schema_validation",
+    "description": "Stock out with a non-integer product_id is rejected",
+    "method": "POST",
+    "path": "/api/inventory/stock-out",
+    "role": "admin",
+    "path_params": {},
+    "query_params": {},
+    "body": {
+      "product_id": "one",
+      "quantity": 1
+    },
+    "expected_status": 422
+  },
+  {
+    "id": "inventory-stockout-boundary-quantity-1",
+    "type": "boundary_value",
+    "description": "Stock out with the smallest valid quantity 1 succeeds",
+    "method": "POST",
+    "path": "/api/inventory/stock-out",
+    "role": "admin",
+    "path_params": {},
+    "query_params": {},
+    "body": {
+      "product_id": 1,
+      "quantity": 1
+    },
+    "expected_status": 200
+  },
+  {
+    "id": "inventory-stockout-boundary-quantity-0",
+    "type": "boundary_value",
+    "description": "Stock out with quantity 0 is rejected",
+    "method": "POST",
+    "path": "/api/inventory/stock-out",
+    "role": "admin",
+    "path_params": {},
+    "query_params": {},
+    "body": {
+      "product_id": 1,
+      "quantity": 0
+    },
+    "expected_status": 422
+  },
+  {
+    "id": "inventory-stockout-boundary-quantity-negative",
+    "type": "boundary_value",
+    "description": "Stock out with negative quantity -1 is rejected",
+    "method": "POST",
+    "path": "/api/inventory/stock-out",
+    "role": "admin",
+    "path_params": {},
+    "query_params": {},
+    "body": {
+      "product_id": 1,
+      "quantity": -1
+    },
+    "expected_status": 422
+  },
+  {
+    "id": "inventory-stockout-boundary-remarks-255",
+    "type": "boundary_value",
+    "description": "Stock out with remarks of exactly 255 characters succeeds",
+    "method": "POST",
+    "path": "/api/inventory/stock-out",
+    "role": "admin",
+    "path_params": {},
+    "query_params": {},
+    "body": {
+      "product_id": 1,
+      "quantity": 2,
+      "remarks": "012345678901234567890123456789012345678901234567890123456789012345678901234567890123456789012345678901234567890123456789012345678901234567890123456789012345678901234567890123456789012345678901234567890123456789012345678901234567890123456789012345678901234"
+    },
+    "expected_status": 200
+  },
+  {
+    "id": "inventory-stockout-boundary-remarks-256",
+    "type": "boundary_value",
+    "description": "Stock out with remarks of 256 characters is rejected",
+    "method": "POST",
+    "path": "/api/inventory/stock-out",
+    "role": "admin",
+    "path_params": {},
+    "query_params": {},
+    "body": {
+      "product_id": 1,
+      "quantity": 2,
+      "remarks": "0123456789012345678901234567890123456789012345678901234567890123456789012345678901234567890123456789012345678901234567890123456789012345678901234567890123456789012345678901234567890123456789012345678901234567890123456789012345678901234567890123456789012345"
+    },
+    "expected_status": 422
+  },
+  {
+    "id": "inventory-stockout-auth-anonymous",
+    "type": "authentication",
+    "description": "Stock out without a token is rejected",
+    "method": "POST",
+    "path": "/api/inventory/stock-out",
+    "role": "anonymous",
+    "path_params": {},
+    "query_params": {},
+    "body": {
+      "product_id": 1,
+      "quantity": 1
+    },
+    "expected_status": 401
+  },
+  {
+    "id": "authentication-login-happy-admin",
+    "type": "happy_path",
+    "description": "Admin logs in with valid credentials and gets 200",
+    "method": "POST",
+    "path": "/api/auth/login",
+    "role": "anonymous",
+    "path_params": {},
+    "query_params": {},
+    "body": {
+      "email": "{{admin.email}}",
+      "password": "{{admin.password}}"
+    },
+    "expected_status": 200
+  },
+  {
+    "id": "authentication-login-happy-manager",
+    "type": "happy_path",
+    "description": "Manager logs in with valid credentials and gets 200",
+    "method": "POST",
+    "path": "/api/auth/login",
+    "role": "anonymous",
+    "path_params": {},
+    "query_params": {},
+    "body": {
+      "email": "{{manager.email}}",
+      "password": "{{manager.password}}"
+    },
+    "expected_status": 200
+  },
+  {
+    "id": "authentication-login-missing-email",
+    "type": "schema_validation",
+    "description": "Login without the required email field is rejected with 422",
+    "method": "POST",
+    "path": "/api/auth/login",
+    "role": "anonymous",
+    "path_params": {},
+    "query_params": {},
+    "body": {
+      "password": "{{admin.password}}"
+    },
+    "expected_status": 422
+  },
+  {
+    "id": "authentication-login-missing-password",
+    "type": "schema_validation",
+    "description": "Login without the required password field is rejected with 422",
+    "method": "POST",
+    "path": "/api/auth/login",
+    "role": "anonymous",
+    "path_params": {},
+    "query_params": {},
+    "body": {
+      "email": "{{admin.email}}"
+    },
+    "expected_status": 422
+  },
+  {
+    "id": "authentication-login-invalid-email-format",
+    "type": "schema_validation",
+    "description": "Login with an email that is not a valid email address is rejected with 422",
+    "method": "POST",
+    "path": "/api/auth/login",
+    "role": "anonymous",
+    "path_params": {},
+    "query_params": {},
+    "body": {
+      "email": "not-an-email",
+      "password": "{{admin.password}}"
+    },
+    "expected_status": 422
+  },
+  {
+    "id": "authentication-login-password-wrong-type",
+    "type": "schema_validation",
+    "description": "Login with a numeric password instead of a string is rejected with 422",
+    "method": "POST",
+    "path": "/api/auth/login",
+    "role": "anonymous",
+    "path_params": {},
+    "query_params": {},
+    "body": {
+      "email": "{{admin.email}}",
+      "password": 12345678
+    },
+    "expected_status": 422
+  },
+  {
+    "id": "authentication-login-empty-body",
+    "type": "schema_validation",
+    "description": "Login with an empty JSON object is rejected with 422",
+    "method": "POST",
+    "path": "/api/auth/login",
+    "role": "anonymous",
+    "path_params": {},
+    "query_params": {},
+    "body": {},
+    "expected_status": 422
+  },
+  {
+    "id": "authentication-login-password-7-chars",
+    "type": "boundary_value",
+    "description": "Password of 7 characters, one below the minimum length of 8, is rejected with 422",
+    "method": "POST",
+    "path": "/api/auth/login",
+    "role": "anonymous",
+    "path_params": {},
+    "query_params": {},
+    "body": {
+      "email": "{{admin.email}}",
+      "password": "abcdefg"
+    },
+    "expected_status": 422
+  },
+  {
+    "id": "authentication-login-password-empty",
+    "type": "boundary_value",
+    "description": "Empty password string is below the minimum length and is rejected with 422",
+    "method": "POST",
+    "path": "/api/auth/login",
+    "role": "anonymous",
+    "path_params": {},
+    "query_params": {},
+    "body": {
+      "email": "{{admin.email}}",
+      "password": ""
+    },
+    "expected_status": 422
+  },
+  {
+    "id": "authentication-me-happy-admin",
+    "type": "happy_path",
+    "description": "Admin retrieves own profile and gets 200",
+    "method": "GET",
+    "path": "/api/auth/me",
+    "role": "admin",
+    "path_params": {},
+    "query_params": {},
+    "body": null,
+    "expected_status": 200
+  },
+  {
+    "id": "authentication-me-happy-manager",
+    "type": "happy_path",
+    "description": "Manager retrieves own profile and gets 200",
+    "method": "GET",
+    "path": "/api/auth/me",
+    "role": "manager",
+    "path_params": {},
+    "query_params": {},
+    "body": null,
+    "expected_status": 200
+  },
+  {
+    "id": "authentication-me-no-token",
+    "type": "authentication",
+    "description": "Requesting the current user profile without a token is rejected with 401",
+    "method": "GET",
+    "path": "/api/auth/me",
+    "role": "anonymous",
+    "path_params": {},
+    "query_params": {},
+    "body": null,
+    "expected_status": 401
+  }
+]
