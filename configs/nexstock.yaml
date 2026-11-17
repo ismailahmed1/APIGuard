@@ -37,3 +37,13 @@ generation:
     max_calls: 10
     max_output_tokens: 150000
     max_cost_usd: 5.00
+
+# Schemathesis baseline (apiguard baseline), run inside the Compose network.
+baseline:
+  docker_network: apiguard-nexstock_default
+  spec_url: http://api:8000/openapi.json
+  base_url: http://api:8000
+  role: admin
+  max_examples: 25
+  seed: 4907
+  timeout_seconds: 900

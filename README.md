@@ -22,7 +22,8 @@ APIGuard currently supports:
 - Summarizing every operation in the specification with `apiguard spec`.
 - Generating test suites with Claude, validating them and saving them with `apiguard generate`.
 - Running saved suites without the AI model with `apiguard run`, and reading results with `apiguard report`.
-- Comparing a run on a seeded fault with a run on the original app with `apiguard compare`.
+- Comparing two runs with `apiguard compare`, and running a Schemathesis baseline with `apiguard baseline`.
+- Evaluating fault detection against seeded NexStock faults with `scripts/evaluate_faults.py`.
 
 The `check` command loads and validates self-contained OpenAPI 3.0, 3.1 and 3.2 documents from JSON/YAML files or HTTP/HTTPS URLs.
 
@@ -174,7 +175,7 @@ apiguard report nexstock                    # latest run
 
 A suite is saved in `suites/nexstock/<suite-id>/` with a snapshot of the specification it was generated from. Runs are saved in `runs/nexstock/<run-id>/` (git-ignored). Login credentials appear in tests only as placeholders such as `{{admin.email}}`; the runner fills them from `.env`, and passwords and tokens are removed from saved results. Each failure has a category: API failure, generated-test error, configuration error or infrastructure error.
 
-### Seeded faults
+### Seeded faults and the Schemathesis baseline
 
 `apps/nexstock/faults/` contains three patches, each with one fault. Start NexStock with one of them, run the same suite, and compare the run with the run on the original app. `compare` accepts run IDs or labels:
 
@@ -183,6 +184,8 @@ NEXSTOCK_FAULT=F01-products-list-without-auth docker compose -f apps/nexstock/co
 apiguard run nexstock --label F01-products-list-without-auth
 apiguard compare nexstock original F01-products-list-without-auth
 ```
+
+`apiguard baseline nexstock --tag ... --label original` runs Schemathesis in Docker on the same operations, and `apiguard compare nexstock A B --schemathesis` compares two baseline runs. `python scripts/evaluate_faults.py` does all of this for the original app and every fault, and prints the fault-detection rate of each tool (`--show` prints the latest saved result). A fault counts as detected only when a tool reports a new failure on the operation that the fault changes. Both tools check the application against the specification snapshot of the suite.
 
 ## Development Checks
 

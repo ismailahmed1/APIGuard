@@ -10,12 +10,13 @@ from dotenv import load_dotenv
 
 from apiguard import __version__
 from apiguard.ai import AIClient, AIError
+from apiguard.baseline import BaselineError, compare_baselines, run_baseline
 from apiguard.config import ConfigError, load_config
 from apiguard.generator import generate_suite
 from apiguard.openapi import SpecError, get_response, load_spec
 from apiguard.operations import extract_operations
 from apiguard.reporting import compare_runs, format_run, format_suite, table
-from apiguard.runner import RunError, load_suite, run_suite
+from apiguard.runner import RunError, get_token, load_suite, reset_app, run_suite
 
 MEDIA_LABELS = {
     "application/json": "json",
@@ -58,6 +59,12 @@ def main(argv=None):
     compare = command("compare", "Find tests that pass in a base run and fail in another run.")
     compare.add_argument("base", help="Base run ID or label, usually the original app.")
     compare.add_argument("other", help="Run ID or label to compare, usually a seeded fault.")
+    compare.add_argument(
+        "--schemathesis", action="store_true", help="Compare Schemathesis runs instead."
+    )
+    baseline = command("baseline", "Run the Schemathesis baseline on the same operations.")
+    baseline.add_argument("--tag", action="append", default=[], help="Only this operation tag.")
+    baseline.add_argument("--label", help="Label for this run, such as a seeded fault ID.")
     args = parser.parse_args(argv)
     # Credentials and the AI key come from the environment or an untracked .env file.
     load_dotenv(Path(".env"), override=False)
@@ -174,10 +181,47 @@ def cmd_report(args):
 
 def cmd_compare(args):
     config = load_app(args.app)
+    if args.schemathesis or args.base.startswith("baseline-") or args.other.startswith("baseline-"):
+        base, other = (
+            read_baseline(config["name"], args.base),
+            read_baseline(config["name"], args.other),
+        )
+        new = compare_baselines(base, other)
+        name = other.get("label") or other["run_id"]
+        print(f"Compared Schemathesis run {other['run_id']} ({name}) with {base['run_id']}:")
+        if new:
+            print(f"DETECTED: {len(new)} new failed checks.")
+            print("\n".join("  " + line for line in table([("OPERATION", "CHECK"), *new])))
+        else:
+            print("NOT DETECTED: no new failed checks.")
+        return 0
     base, base_results = read_run(config["name"], args.base)
     other, other_results = read_run(config["name"], args.other)
     text, _ = compare_runs(base, base_results, other, other_results)
     print(text)
+    return 0
+
+
+def cmd_baseline(args):
+    config = load_app(args.app)
+    try:
+        # The same starting data as an APIGuard run.
+        reset_app(config)
+        token = get_token(config, config.get("baseline", {}).get("role", "admin"))
+        directory, summary = run_baseline(config, args.tag, token, RUNS_DIR, args.label)
+    except (RunError, BaselineError) as exc:
+        raise Failure(f"Baseline error: {exc}", 1) from exc
+    failing = {op: checks for op, checks in summary["failures"].items() if checks}
+    label = f" [{summary['label']}]" if summary.get("label") else ""
+    print(
+        f"Schemathesis run {summary['run_id']}{label}: {summary['operations_tested']} operations, "
+        f"{len(failing)} with failures, {summary['seconds']} s"
+    )
+    if failing:
+        rows = [("OPERATION", "FAILED CHECKS")]
+        rows += [(op, ", ".join(checks)) for op, checks in failing.items()]
+        print("\n".join("  " + line for line in table(rows)))
+    print(f"Saved to {directory}")
     return 0
 
 
@@ -207,6 +251,15 @@ def read_run(app_name, run_id):
     except (OSError, json.JSONDecodeError) as exc:
         raise Failure(f"Error: cannot read run {run_id or 'LATEST'} in {root}.", 2) from exc
     return run, results
+
+
+def read_baseline(app_name, run_id):
+    run_id = resolve_run(app_name, run_id, baseline=True)
+    path = Path(RUNS_DIR) / app_name / run_id / "summary.json"
+    try:
+        return json.loads(path.read_text(encoding="utf-8"))
+    except (OSError, json.JSONDecodeError) as exc:
+        raise Failure(f"Error: cannot read Schemathesis run {run_id}.", 2) from exc
 
 
 def format_summary(name, version, operations):
@@ -260,6 +313,7 @@ COMMANDS = {
     "run": cmd_run,
     "report": cmd_report,
     "compare": cmd_compare,
+    "baseline": cmd_baseline,
 }
 
 
