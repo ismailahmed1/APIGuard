@@ -1,0 +1,471 @@
+[
+  {
+    "id": "categories-list-happy",
+    "type": "happy_path",
+    "description": "Admin can list all categories",
+    "method": "GET",
+    "path": "/api/categories",
+    "role": "admin",
+    "path_params": {},
+    "query_params": {},
+    "body": null,
+    "expected_status": 200
+  },
+  {
+    "id": "categories-list-manager-happy",
+    "type": "happy_path",
+    "description": "Manager can list all categories",
+    "method": "GET",
+    "path": "/api/categories",
+    "role": "manager",
+    "path_params": {},
+    "query_params": {},
+    "body": null,
+    "expected_status": 200
+  },
+  {
+    "id": "categories-list-noauth",
+    "type": "authentication",
+    "description": "Listing categories without a token is rejected",
+    "method": "GET",
+    "path": "/api/categories",
+    "role": "anonymous",
+    "path_params": {},
+    "query_params": {},
+    "body": null,
+    "expected_status": 401
+  },
+  {
+    "id": "categories-create-happy",
+    "type": "happy_path",
+    "description": "Admin creates a new category with a unique name and description",
+    "method": "POST",
+    "path": "/api/categories",
+    "role": "admin",
+    "path_params": {},
+    "query_params": {},
+    "body": {
+      "name": "Medical Supplies",
+      "description": "First aid and medical items"
+    },
+    "expected_status": 201
+  },
+  {
+    "id": "categories-create-noauth",
+    "type": "authentication",
+    "description": "Creating a category without a token is rejected",
+    "method": "POST",
+    "path": "/api/categories",
+    "role": "anonymous",
+    "path_params": {},
+    "query_params": {},
+    "body": {
+      "name": "Medical Supplies"
+    },
+    "expected_status": 401
+  },
+  {
+    "id": "categories-create-missing-name",
+    "type": "schema_validation",
+    "description": "Creating a category without the required name fails validation",
+    "method": "POST",
+    "path": "/api/categories",
+    "role": "admin",
+    "path_params": {},
+    "query_params": {},
+    "body": {
+      "description": "No name given"
+    },
+    "expected_status": 422
+  },
+  {
+    "id": "categories-create-name-wrong-type",
+    "type": "schema_validation",
+    "description": "Creating a category with a non-string name fails validation",
+    "method": "POST",
+    "path": "/api/categories",
+    "role": "admin",
+    "path_params": {},
+    "query_params": {},
+    "body": {
+      "name": 12345
+    },
+    "expected_status": 422
+  },
+  {
+    "id": "categories-create-description-wrong-type",
+    "type": "schema_validation",
+    "description": "Creating a category with a non-string description fails validation",
+    "method": "POST",
+    "path": "/api/categories",
+    "role": "admin",
+    "path_params": {},
+    "query_params": {},
+    "body": {
+      "name": "Medical Supplies",
+      "description": [
+        "x"
+      ]
+    },
+    "expected_status": 422
+  },
+  {
+    "id": "categories-create-name-empty",
+    "type": "boundary_value",
+    "description": "Empty name is below the minimum length of 1",
+    "method": "POST",
+    "path": "/api/categories",
+    "role": "admin",
+    "path_params": {},
+    "query_params": {},
+    "body": {
+      "name": ""
+    },
+    "expected_status": 422
+  },
+  {
+    "id": "categories-create-name-min",
+    "type": "boundary_value",
+    "description": "Name with exactly 1 character is accepted",
+    "method": "POST",
+    "path": "/api/categories",
+    "role": "admin",
+    "path_params": {},
+    "query_params": {},
+    "body": {
+      "name": "Z"
+    },
+    "expected_status": 201
+  },
+  {
+    "id": "categories-create-name-max",
+    "type": "boundary_value",
+    "description": "Name with exactly 100 characters is accepted",
+    "method": "POST",
+    "path": "/api/categories",
+    "role": "admin",
+    "path_params": {},
+    "query_params": {},
+    "body": {
+      "name": "aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa"
+    },
+    "expected_status": 201
+  },
+  {
+    "id": "categories-create-name-too-long",
+    "type": "boundary_value",
+    "description": "Name with 101 characters exceeds the maximum length",
+    "method": "POST",
+    "path": "/api/categories",
+    "role": "admin",
+    "path_params": {},
+    "query_params": {},
+    "body": {
+      "name": "aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa"
+    },
+    "expected_status": 422
+  },
+  {
+    "id": "categories-create-description-max",
+    "type": "boundary_value",
+    "description": "Description with exactly 255 characters is accepted",
+    "method": "POST",
+    "path": "/api/categories",
+    "role": "admin",
+    "path_params": {},
+    "query_params": {},
+    "body": {
+      "name": "Medical Supplies",
+      "description": "ddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddd"
+    },
+    "expected_status": 201
+  },
+  {
+    "id": "categories-create-description-too-long",
+    "type": "boundary_value",
+    "description": "Description with 256 characters exceeds the maximum length",
+    "method": "POST",
+    "path": "/api/categories",
+    "role": "admin",
+    "path_params": {},
+    "query_params": {},
+    "body": {
+      "name": "Medical Supplies",
+      "description": "dddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddd"
+    },
+    "expected_status": 422
+  },
+  {
+    "id": "categories-get-happy",
+    "type": "happy_path",
+    "description": "Admin retrieves existing category 1 (Electronics)",
+    "method": "GET",
+    "path": "/api/categories/{category_id}",
+    "role": "admin",
+    "path_params": {
+      "category_id": "1"
+    },
+    "query_params": {},
+    "body": null,
+    "expected_status": 200
+  },
+  {
+    "id": "categories-get-noauth",
+    "type": "authentication",
+    "description": "Retrieving a category without a token is rejected",
+    "method": "GET",
+    "path": "/api/categories/{category_id}",
+    "role": "anonymous",
+    "path_params": {
+      "category_id": "1"
+    },
+    "query_params": {},
+    "body": null,
+    "expected_status": 401
+  },
+  {
+    "id": "categories-get-not-found",
+    "type": "happy_path",
+    "description": "Retrieving a non-existent category returns 404",
+    "method": "GET",
+    "path": "/api/categories/{category_id}",
+    "role": "admin",
+    "path_params": {
+      "category_id": "9999"
+    },
+    "query_params": {},
+    "body": null,
+    "expected_status": 404
+  },
+  {
+    "id": "categories-get-invalid-id",
+    "type": "schema_validation",
+    "description": "Non-integer category id fails validation",
+    "method": "GET",
+    "path": "/api/categories/{category_id}",
+    "role": "admin",
+    "path_params": {
+      "category_id": "abc"
+    },
+    "query_params": {},
+    "body": null,
+    "expected_status": 422
+  },
+  {
+    "id": "categories-update-happy",
+    "type": "happy_path",
+    "description": "Admin updates name and description of category 4",
+    "method": "PUT",
+    "path": "/api/categories/{category_id}",
+    "role": "admin",
+    "path_params": {
+      "category_id": "4"
+    },
+    "query_params": {},
+    "body": {
+      "name": "Office & Stationery",
+      "description": "Paper, pens and desk items"
+    },
+    "expected_status": 200
+  },
+  {
+    "id": "categories-update-noauth",
+    "type": "authentication",
+    "description": "Updating a category without a token is rejected",
+    "method": "PUT",
+    "path": "/api/categories/{category_id}",
+    "role": "anonymous",
+    "path_params": {
+      "category_id": "4"
+    },
+    "query_params": {},
+    "body": {
+      "description": "Updated"
+    },
+    "expected_status": 401
+  },
+  {
+    "id": "categories-update-not-found",
+    "type": "happy_path",
+    "description": "Updating a non-existent category returns 404",
+    "method": "PUT",
+    "path": "/api/categories/{category_id}",
+    "role": "admin",
+    "path_params": {
+      "category_id": "9999"
+    },
+    "query_params": {},
+    "body": {
+      "description": "Updated"
+    },
+    "expected_status": 404
+  },
+  {
+    "id": "categories-update-invalid-id",
+    "type": "schema_validation",
+    "description": "Non-integer category id on update fails validation",
+    "method": "PUT",
+    "path": "/api/categories/{category_id}",
+    "role": "admin",
+    "path_params": {
+      "category_id": "abc"
+    },
+    "query_params": {},
+    "body": {
+      "description": "Updated"
+    },
+    "expected_status": 422
+  },
+  {
+    "id": "categories-update-name-wrong-type",
+    "type": "schema_validation",
+    "description": "Updating with a non-string name fails validation",
+    "method": "PUT",
+    "path": "/api/categories/{category_id}",
+    "role": "admin",
+    "path_params": {
+      "category_id": "4"
+    },
+    "query_params": {},
+    "body": {
+      "name": 42
+    },
+    "expected_status": 422
+  },
+  {
+    "id": "categories-update-name-empty",
+    "type": "boundary_value",
+    "description": "Updating with an empty name is below the minimum length",
+    "method": "PUT",
+    "path": "/api/categories/{category_id}",
+    "role": "admin",
+    "path_params": {
+      "category_id": "4"
+    },
+    "query_params": {},
+    "body": {
+      "name": ""
+    },
+    "expected_status": 422
+  },
+  {
+    "id": "categories-update-name-max",
+    "type": "boundary_value",
+    "description": "Updating with a 100-character name is accepted",
+    "method": "PUT",
+    "path": "/api/categories/{category_id}",
+    "role": "admin",
+    "path_params": {
+      "category_id": "4"
+    },
+    "query_params": {},
+    "body": {
+      "name": "bbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbb"
+    },
+    "expected_status": 200
+  },
+  {
+    "id": "categories-update-name-too-long",
+    "type": "boundary_value",
+    "description": "Updating with a 101-character name exceeds the maximum length",
+    "method": "PUT",
+    "path": "/api/categories/{category_id}",
+    "role": "admin",
+    "path_params": {
+      "category_id": "4"
+    },
+    "query_params": {},
+    "body": {
+      "name": "bbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbb"
+    },
+    "expected_status": 422
+  },
+  {
+    "id": "categories-update-description-max",
+    "type": "boundary_value",
+    "description": "Updating with a 255-character description is accepted",
+    "method": "PUT",
+    "path": "/api/categories/{category_id}",
+    "role": "admin",
+    "path_params": {
+      "category_id": "4"
+    },
+    "query_params": {},
+    "body": {
+      "description": "ddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddd"
+    },
+    "expected_status": 200
+  },
+  {
+    "id": "categories-update-description-too-long",
+    "type": "boundary_value",
+    "description": "Updating with a 256-character description exceeds the maximum length",
+    "method": "PUT",
+    "path": "/api/categories/{category_id}",
+    "role": "admin",
+    "path_params": {
+      "category_id": "4"
+    },
+    "query_params": {},
+    "body": {
+      "description": "dddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddd"
+    },
+    "expected_status": 422
+  },
+  {
+    "id": "categories-delete-happy",
+    "type": "happy_path",
+    "description": "Admin deletes existing category 10",
+    "method": "DELETE",
+    "path": "/api/categories/{category_id}",
+    "role": "admin",
+    "path_params": {
+      "category_id": "10"
+    },
+    "query_params": {},
+    "body": null,
+    "expected_status": 200
+  },
+  {
+    "id": "categories-delete-noauth",
+    "type": "authentication",
+    "description": "Deleting a category without a token is rejected",
+    "method": "DELETE",
+    "path": "/api/categories/{category_id}",
+    "role": "anonymous",
+    "path_params": {
+      "category_id": "10"
+    },
+    "query_params": {},
+    "body": null,
+    "expected_status": 401
+  },
+  {
+    "id": "categories-delete-not-found",
+    "type": "happy_path",
+    "description": "Deleting a non-existent category returns 404",
+    "method": "DELETE",
+    "path": "/api/categories/{category_id}",
+    "role": "admin",
+    "path_params": {
+      "category_id": "9999"
+    },
+    "query_params": {},
+    "body": null,
+    "expected_status": 404
+  },
+  {
+    "id": "categories-delete-invalid-id",
+    "type": "schema_validation",
+    "description": "Non-integer category id on delete fails validation",
+    "method": "DELETE",
+    "path": "/api/categories/{category_id}",
+    "role": "admin",
+    "path_params": {
+      "category_id": "abc"
+    },
+    "query_params": {},
+    "body": null,
+    "expected_status": 422
+  }
+]

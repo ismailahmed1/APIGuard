@@ -65,6 +65,11 @@ def main(argv=None):
     baseline = command("baseline", "Run the Schemathesis baseline on the same operations.")
     baseline.add_argument("--tag", action="append", default=[], help="Only this operation tag.")
     baseline.add_argument("--label", help="Label for this run, such as a seeded fault ID.")
+
+    ui = command("ui", "Open a local web UI for generating, running and comparing suites.")
+    ui.add_argument("--port", type=int, default=8765, help="Local port (default: 8765).")
+    ui.add_argument("--no-browser", action="store_true", help="Do not open a browser.")
+
     args = parser.parse_args(argv)
     # Credentials and the AI key come from the environment or an untracked .env file.
     load_dotenv(Path(".env"), override=False)
@@ -306,6 +311,12 @@ def _body_label(body):
     return (", ".join(labels) or "empty") + ("*" if body.required else "")
 
 
+def cmd_ui(args):
+    from apiguard.ui import serve
+
+    return serve(load_app(args.app), args.port, open_browser=not args.no_browser)
+
+
 COMMANDS = {
     "check": cmd_check,
     "spec": cmd_spec,
@@ -314,6 +325,7 @@ COMMANDS = {
     "report": cmd_report,
     "compare": cmd_compare,
     "baseline": cmd_baseline,
+    "ui": cmd_ui,
 }
 
 
