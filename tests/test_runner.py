@@ -1,0 +1,224 @@
+import json
+import subprocess
+
+import httpx
+import pytest
+from shop_spec import SHOP
+
+from apiguard.operations import extract_operations
+from apiguard.runner import RunError, get_token, load_suite, run_suite
+
+TOKEN = "eyJhbGciOiJIUzI1NiJ9.eyJzdWIiOiIxIn0.c2lnbmF0dXJl"
+PASSWORD = "Sup3r-Secret!"
+OPERATIONS = extract_operations(SHOP)
+REAL_CLIENT = httpx.Client
+
+
+def config():
+    return {
+        "name": "shop",
+        "base_url": "http://shop.test",
+        "timeouts": {"request_seconds": 5, "run_seconds": 60},
+        "auth": {
+            "login_path": "/api/auth/login",
+            "token_path": "data.access_token",
+            "roles": {
+                "admin": {"email_env": "SHOP_ADMIN_EMAIL", "password_env": "SHOP_ADMIN_PASSWORD"},
+                "manager": {
+                    "email_env": "SHOP_MANAGER_EMAIL",
+                    "password_env": "SHOP_MANAGER_PASSWORD",
+                },
+            },
+        },
+        "reset": {"command": ["reset-shop"]},
+    }
+
+
+def make_test(test_id, method, path, role="admin", expected=200, body=None, path_params=None):
+    return {
+        "id": test_id,
+        "type": "happy_path",
+        "description": test_id,
+        "method": method,
+        "path": path,
+        "role": role,
+        "path_params": path_params or {},
+        "query_params": {},
+        "body": body,
+        "expected_status": expected,
+    }
+
+
+def shop(request):
+    """A fake API: login, a protected list, a create and a delete that crashes."""
+    authorized = request.headers.get("Authorization") == f"Bearer {TOKEN}"
+    if request.url.path == "/api/auth/login":
+        body = json.loads(request.content)
+        if body == {"email": "admin@shop.test", "password": PASSWORD}:
+            return httpx.Response(200, json={"data": {"access_token": TOKEN}})
+        return httpx.Response(401, json={"detail": "bad credentials"})
+    if not authorized:
+        return httpx.Response(401, json={"detail": "Not authenticated"})
+    if request.method == "GET":
+        return httpx.Response(200, json={"data": []})
+    if request.method == "POST":
+        return httpx.Response(201, json={"id": 7})
+    return httpx.Response(500, text="Internal Server Error")
+
+
+@pytest.fixture
+def server(monkeypatch, tmp_path):
+    monkeypatch.setenv("SHOP_ADMIN_EMAIL", "admin@shop.test")
+    monkeypatch.setenv("SHOP_ADMIN_PASSWORD", PASSWORD)
+    monkeypatch.delenv("SHOP_MANAGER_EMAIL", raising=False)
+    resets = []
+
+    def fake_reset(command, **kwargs):
+        resets.append(command)
+        return subprocess.CompletedProcess(command, 0)
+
+    handler = {"value": shop}
+    monkeypatch.setattr("apiguard.runner.subprocess.run", fake_reset)
+    monkeypatch.setattr(
+        "apiguard.runner.httpx.Client",
+        lambda **kwargs: REAL_CLIENT(
+            transport=httpx.MockTransport(lambda r: handler["value"](r)), **kwargs
+        ),
+    )
+    monkeypatch.chdir(tmp_path)
+    return {"resets": resets, "handler": handler}
+
+
+def run(tests, settings=None):
+    return run_suite(settings or config(), {"suite_id": "s1"}, tests, OPERATIONS, "runs")
+
+
+def test_run_records_results_and_categories(server):
+    tests = [
+        make_test(
+            "create", "POST", "/api/products", expected=201, body={"name": "Lamp", "price": 1}
+        ),
+        make_test(
+            "delete",
+            "DELETE",
+            "/api/products/{product_id}",
+            path_params={"product_id": "3"},
+        ),
+        make_test("list", "GET", "/api/products"),
+        make_test("anonymous", "GET", "/api/products", role="anonymous", expected=401),
+        make_test("manager", "GET", "/api/products", role="manager"),
+    ]
+    directory, summary, results = run(tests)
+
+    by_id = {r["id"]: r for r in results}
+    # Reads run before changes; the second change starts from a fresh reset.
+    assert [r["id"] for r in results] == ["list", "anonymous", "manager", "create", "delete"]
+    assert len(server["resets"]) == 2
+    assert by_id["list"]["outcome"] == "passed"
+    assert by_id["anonymous"]["outcome"] == "passed"
+    assert by_id["create"]["actual"]["status"] == 201
+    assert by_id["delete"]["category"] == "api_failure"
+    assert by_id["delete"]["detail"] == "server error 500 (expected 200)"
+    assert by_id["delete"]["request"]["path_params"] == {"product_id": "3"}
+    assert by_id["manager"]["category"] == "configuration_error"
+    assert by_id["manager"]["detail"] == "environment variable SHOP_MANAGER_EMAIL is not set"
+
+    assert summary["outcomes"] == {"passed": 3, "failed": 1, "error": 1}
+    assert summary["categories"] == {"api_failure": 1, "configuration_error": 1}
+    assert summary["ai_model_used"] is False
+    saved = json.loads((directory / "results.json").read_text())
+    assert saved == results
+    assert (directory.parent / "LATEST").read_text().strip() == summary["run_id"]
+
+
+def test_credentials_use_placeholders_and_are_redacted(server):
+    login = make_test(
+        "login",
+        "POST",
+        "/api/auth/login",
+        role="anonymous",
+        body={"email": "{{admin.email}}", "password": "{{admin.password}}"},
+    )
+    directory, _, results = run([login])
+    assert results[0]["outcome"] == "passed"
+    # The saved request keeps the placeholders; the token in the response is removed.
+    assert results[0]["request"]["body"]["password"] == "{{admin.password}}"
+    text = (directory / "results.json").read_text() + (directory / "run.json").read_text()
+    assert PASSWORD not in text
+    assert TOKEN not in text
+    assert "[REDACTED" in results[0]["actual"]["body_excerpt"]
+
+
+def test_response_schema_mismatch(server):
+    server["handler"]["value"] = lambda r: (
+        httpx.Response(200, json={"items": []}) if r.url.path != "/api/auth/login" else shop(r)
+    )
+    _, _, results = run([make_test("list", "GET", "/api/products")])
+    assert results[0]["outcome"] == "failed"
+    assert results[0]["detail"].startswith("response does not match its schema at (root)")
+
+
+def test_unreachable_application_does_not_stop_other_tests(server):
+    def flaky(request):
+        if request.url.path == "/api/auth/login":
+            return shop(request)
+        if request.headers.get("X-Never") is None and request.method == "GET":
+            raise httpx.ConnectError("refused", request=request)
+        return shop(request)
+
+    server["handler"]["value"] = flaky
+    tests = [
+        make_test("list", "GET", "/api/products"),
+        make_test("create", "POST", "/api/products", expected=201, body={"name": "A", "price": 1}),
+    ]
+    _, _, results = run(tests)
+    assert results[0]["category"] == "infrastructure_error"
+    assert results[1]["outcome"] == "passed"
+
+
+def test_run_time_limit_marks_remaining_tests(server):
+    settings = config()
+    settings["timeouts"]["run_seconds"] = 0.000001
+    _, summary, results = run([make_test("list", "GET", "/api/products")], settings)
+    assert results[0]["outcome"] == "not_run"
+    assert summary["outcomes"] == {"not_run": 1}
+
+
+def test_failed_reset_stops_the_run(server, monkeypatch):
+    def failing(command, **kwargs):
+        raise subprocess.CalledProcessError(1, command)
+
+    monkeypatch.setattr("apiguard.runner.subprocess.run", failing)
+    with pytest.raises(RunError, match="resetting the application data failed"):
+        run([make_test("list", "GET", "/api/products")])
+
+
+def test_get_token(server):
+    assert get_token(config(), "admin") == TOKEN
+    with pytest.raises(RunError, match="SHOP_MANAGER_EMAIL is not set"):
+        get_token(config(), "manager")
+
+
+def test_load_suite(tmp_path):
+    with pytest.raises(RunError, match="no saved suite for shop"):
+        load_suite(tmp_path, "shop")
+    suite = tmp_path / "shop" / "s1"
+    suite.mkdir(parents=True)
+    (suite / "suite.json").write_text('{"suite_id": "s1"}')
+    (suite / "tests.json").write_text("[]")
+    (tmp_path / "shop" / "LATEST").write_text("s1\n")
+    directory, metadata, tests = load_suite(tmp_path, "shop")
+    assert (directory, metadata, tests) == (suite, {"suite_id": "s1"}, [])
+
+
+def test_each_request_uses_a_fresh_connection(server, monkeypatch):
+    # FastAPI closes the connection after a server error; reusing it fails the next test.
+    created = []
+
+    def client(**kwargs):
+        created.append(kwargs)
+        return REAL_CLIENT(transport=httpx.MockTransport(shop), **kwargs)
+
+    monkeypatch.setattr("apiguard.runner.httpx.Client", client)
+    run([make_test("list", "GET", "/api/products")])
+    assert created[0]["limits"].max_keepalive_connections == 0

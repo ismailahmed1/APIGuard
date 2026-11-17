@@ -14,7 +14,8 @@ from apiguard.config import ConfigError, load_config
 from apiguard.generator import generate_suite
 from apiguard.openapi import SpecError, get_response, load_spec
 from apiguard.operations import extract_operations
-from apiguard.reporting import format_suite, table
+from apiguard.reporting import format_run, format_suite, table
+from apiguard.runner import RunError, load_suite, run_suite
 
 MEDIA_LABELS = {
     "application/json": "json",
@@ -22,6 +23,7 @@ MEDIA_LABELS = {
     "multipart/form-data": "multipart",
 }
 SUITES_DIR = "suites"
+RUNS_DIR = "runs"
 DEFAULT_MODEL = "claude-opus-5-5"
 
 
@@ -47,8 +49,12 @@ def main(argv=None):
     command("spec", "Show a summary of the operations in the OpenAPI specification.")
     generate = command("generate", "Generate and save a test suite with the AI model.")
     generate.add_argument("--tag", action="append", default=[], help="Only this operation tag.")
-    for name in ("run", "report"):
-        command(name, "Not implemented yet.")
+    run = command("run", "Run a saved test suite without the AI model.")
+    run.add_argument("--suite", help="Suite ID (default: the latest suite).")
+    run.add_argument("--label", help="Label for this run, such as a seeded fault ID.")
+    run.add_argument("--no-reset", action="store_true", help="Do not reset the test data.")
+    report = command("report", "Show the report of a saved run.")
+    report.add_argument("--run", help="Run ID (default: the latest run).")
     args = parser.parse_args(argv)
     # Credentials and the AI key come from the environment or an untracked .env file.
     load_dotenv(Path(".env"), override=False)
@@ -140,6 +146,57 @@ def cmd_generate(args):
     return 0 if metadata["counts"]["valid"] else 1
 
 
+def cmd_run(args):
+    config = load_app(args.app)
+    try:
+        suite_dir, metadata, tests = load_suite(SUITES_DIR, config["name"], args.suite)
+        # The suite's own snapshot describes the operations that its tests were written for.
+        snapshot = load_spec(str(suite_dir / "openapi.yaml"), config["timeouts"]["request_seconds"])
+        operations = extract_operations(snapshot.document)
+        _, run, results = run_suite(
+            config, metadata, tests, operations, RUNS_DIR, args.label, reset=not args.no_reset
+        )
+    except (RunError, SpecError) as exc:
+        raise Failure(f"Run error: {exc}", 1) from exc
+    print(format_run(run, results))
+    return 0 if run["outcomes"].get("passed", 0) == run["total"] else 1
+
+
+def cmd_report(args):
+    config = load_app(args.app)
+    run, results = read_run(config["name"], args.run)
+    print(format_run(run, results))
+    return 0
+
+
+def resolve_run(app_name, name, baseline=False):
+    """Accept a run ID, or a label such as 'original' for the latest run with that label."""
+    root = Path(RUNS_DIR) / app_name
+    if (root / name).is_dir():
+        return name
+    summary = "summary.json" if baseline else "run.json"
+    pattern = "baseline-*" if baseline else "[0-9]*"
+    for directory in sorted(root.glob(pattern), reverse=True):
+        try:
+            if json.loads((directory / summary).read_text(encoding="utf-8")).get("label") == name:
+                return directory.name
+        except (OSError, json.JSONDecodeError):
+            continue
+    return name
+
+
+def read_run(app_name, run_id):
+    root = Path(RUNS_DIR) / app_name
+    try:
+        run_id = run_id or (root / "LATEST").read_text(encoding="utf-8").strip()
+        run_id = resolve_run(app_name, run_id)
+        run = json.loads((root / run_id / "run.json").read_text(encoding="utf-8"))
+        results = json.loads((root / run_id / "results.json").read_text(encoding="utf-8"))
+    except (OSError, json.JSONDecodeError) as exc:
+        raise Failure(f"Error: cannot read run {run_id or 'LATEST'} in {root}.", 2) from exc
+    return run, results
+
+
 def format_summary(name, version, operations):
     """Format operations as a plain-text table; a trailing * marks a required input."""
     protected = sum(operation.requires_auth for operation in operations)
@@ -184,16 +241,12 @@ def _body_label(body):
     return (", ".join(labels) or "empty") + ("*" if body.required else "")
 
 
-def cmd_placeholder(args):
-    raise Failure(f"Error: '{args.command}' is not implemented yet.", 2)
-
-
 COMMANDS = {
     "check": cmd_check,
     "spec": cmd_spec,
     "generate": cmd_generate,
-    "run": cmd_placeholder,
-    "report": cmd_placeholder,
+    "run": cmd_run,
+    "report": cmd_report,
 }
 
 

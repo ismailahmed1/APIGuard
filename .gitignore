@@ -25,5 +25,8 @@ htmlcov/
 build/
 dist/
 
+# APIGuard run results (suites are kept so they can be rerun)
+runs/
+
 # macOS
 .DS_Store

@@ -9,6 +9,7 @@ timeouts:
 auth:
   login_path: /api/auth/login
   token_path: data.access_token
+  username_field: email
   roles:
     admin:
       email_env: NEXSTOCK_ADMIN_EMAIL

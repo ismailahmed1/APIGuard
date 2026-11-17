@@ -1,4 +1,13 @@
-"""Format generated suites for the CLI."""
+"""Format generated suites, run results and failure categories for the CLI."""
+
+from apiguard.validator import TEST_TYPES
+
+CATEGORY_LABELS = {
+    "api_failure": "API failure",
+    "test_error": "Generated-test error",
+    "configuration_error": "Configuration error",
+    "infrastructure_error": "Infrastructure error",
+}
 
 
 def table(rows):
@@ -31,4 +40,35 @@ def format_suite(metadata, excluded):
         for item in excluded:
             test = item["test"] if isinstance(item["test"], dict) else {}
             lines.append(f"  {test.get('id', '?')}: {item['reason']}")
+    return "\n".join(lines)
+
+
+def format_run(run, results):
+    outcomes = run["outcomes"]
+    label = f" [{run['label']}]" if run.get("label") else ""
+    lines = [
+        (
+            f"Run {run['run_id']}{label}: suite {run['suite_id']}, {run['total']} tests, "
+            f"{run['requests']} requests, {run['seconds']} s, no AI model used"
+        ),
+        "  ".join(f"{name} {outcomes.get(name, 0)}" for name in ("passed", "failed", "error"))
+        + (f"  not run {outcomes['not_run']}" if outcomes.get("not_run") else ""),
+        "",
+    ]
+    rows = [("TEST TYPE", "PASSED", "TOTAL")]
+    for test_type in TEST_TYPES:
+        of_type = [r for r in results if r["type"] == test_type]
+        if of_type:
+            passed = sum(r["outcome"] == "passed" for r in of_type)
+            rows.append((test_type, passed, len(of_type)))
+    lines += table(rows)
+
+    problems = [r for r in results if r["outcome"] != "passed"]
+    for category, label_text in CATEGORY_LABELS.items():
+        in_category = [r for r in problems if r["category"] == category]
+        if not in_category:
+            continue
+        lines += ["", f"{label_text}s ({len(in_category)}):"]
+        rows = [(r["id"], r["operation"], r["role"], r["detail"]) for r in in_category]
+        lines += ["  " + line for line in table(rows)]
     return "\n".join(lines)
