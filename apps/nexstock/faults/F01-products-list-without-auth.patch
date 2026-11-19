@@ -1,0 +1,10 @@
+--- a/backend/app/api/products.py
++++ b/backend/app/api/products.py
+@@ -15,7 +15,6 @@
+ def get_products(
+     category_id: Optional[int] = None,
+     db: Session = Depends(get_db),
+-    current_user: dict = Depends(get_current_user),
+ ) -> dict:
+     """
+     Retrieves all active products, with optional category filtering.

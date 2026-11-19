@@ -14,7 +14,7 @@ from apiguard.config import ConfigError, load_config
 from apiguard.generator import generate_suite
 from apiguard.openapi import SpecError, get_response, load_spec
 from apiguard.operations import extract_operations
-from apiguard.reporting import format_run, format_suite, table
+from apiguard.reporting import compare_runs, format_run, format_suite, table
 from apiguard.runner import RunError, load_suite, run_suite
 
 MEDIA_LABELS = {
@@ -55,6 +55,9 @@ def main(argv=None):
     run.add_argument("--no-reset", action="store_true", help="Do not reset the test data.")
     report = command("report", "Show the report of a saved run.")
     report.add_argument("--run", help="Run ID (default: the latest run).")
+    compare = command("compare", "Find tests that pass in a base run and fail in another run.")
+    compare.add_argument("base", help="Base run ID or label, usually the original app.")
+    compare.add_argument("other", help="Run ID or label to compare, usually a seeded fault.")
     args = parser.parse_args(argv)
     # Credentials and the AI key come from the environment or an untracked .env file.
     load_dotenv(Path(".env"), override=False)
@@ -169,6 +172,15 @@ def cmd_report(args):
     return 0
 
 
+def cmd_compare(args):
+    config = load_app(args.app)
+    base, base_results = read_run(config["name"], args.base)
+    other, other_results = read_run(config["name"], args.other)
+    text, _ = compare_runs(base, base_results, other, other_results)
+    print(text)
+    return 0
+
+
 def resolve_run(app_name, name, baseline=False):
     """Accept a run ID, or a label such as 'original' for the latest run with that label."""
     root = Path(RUNS_DIR) / app_name
@@ -247,6 +259,7 @@ COMMANDS = {
     "generate": cmd_generate,
     "run": cmd_run,
     "report": cmd_report,
+    "compare": cmd_compare,
 }
 
 

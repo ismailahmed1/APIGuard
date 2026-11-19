@@ -22,6 +22,7 @@ APIGuard currently supports:
 - Summarizing every operation in the specification with `apiguard spec`.
 - Generating test suites with Claude, validating them and saving them with `apiguard generate`.
 - Running saved suites without the AI model with `apiguard run`, and reading results with `apiguard report`.
+- Comparing a run on a seeded fault with a run on the original app with `apiguard compare`.
 
 The `check` command loads and validates self-contained OpenAPI 3.0, 3.1 and 3.2 documents from JSON/YAML files or HTTP/HTTPS URLs.
 
@@ -172,6 +173,16 @@ apiguard report nexstock                    # latest run
 ```
 
 A suite is saved in `suites/nexstock/<suite-id>/` with a snapshot of the specification it was generated from. Runs are saved in `runs/nexstock/<run-id>/` (git-ignored). Login credentials appear in tests only as placeholders such as `{{admin.email}}`; the runner fills them from `.env`, and passwords and tokens are removed from saved results. Each failure has a category: API failure, generated-test error, configuration error or infrastructure error.
+
+### Seeded faults
+
+`apps/nexstock/faults/` contains three patches, each with one fault. Start NexStock with one of them, run the same suite, and compare the run with the run on the original app. `compare` accepts run IDs or labels:
+
+```bash
+NEXSTOCK_FAULT=F01-products-list-without-auth docker compose -f apps/nexstock/compose.yaml up --detach --wait api
+apiguard run nexstock --label F01-products-list-without-auth
+apiguard compare nexstock original F01-products-list-without-auth
+```
 
 ## Development Checks
 
