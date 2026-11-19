@@ -21,8 +21,9 @@ APIGuard currently supports:
 - Reporting configuration and connection errors with meaningful exit codes.
 - Summarizing every operation in the specification with `apiguard spec`.
 - Generating test suites with Claude, validating them and saving them with `apiguard generate`.
+- Running saved suites without the AI model with `apiguard run`, and reading results with `apiguard report`.
 
-The `run` and `report` commands are placeholders and are not implemented yet. The `check` command loads and validates self-contained OpenAPI 3.0, 3.1 and 3.2 documents from JSON/YAML files or HTTP/HTTPS URLs.
+The `check` command loads and validates self-contained OpenAPI 3.0, 3.1 and 3.2 documents from JSON/YAML files or HTTP/HTTPS URLs.
 
 ## Local Setup — Windows PowerShell
 
@@ -160,15 +161,17 @@ The table comes from `apiguard.operations.extract_operations(document)`, which r
 
 The OpenAPI document only states which operations need a token. It does not state which roles may call them, such as NexStock's Admin-only operations, so authorization tests need that information from another source.
 
-## Generate Tests
+## Generate and Run Tests
 
 `apiguard generate` sends the extracted operations and `apps/nexstock/context.md` to Claude and asks for structured test definitions (happy path, schema validation, authentication and boundary value). APIGuard validates every definition against the specification before it saves it, and records why it excluded the others. Set `ANTHROPIC_API_KEY` in the git-ignored `.env` file. The `generation.limits` section in the configuration caps calls, output tokens and estimated cost.
 
 ```bash
 apiguard generate nexstock --tag Authentication --tag Categories --tag Products --tag Inventory
+apiguard run nexstock --label original      # no AI model; resets seed data
+apiguard report nexstock                    # latest run
 ```
 
-A suite is saved in `suites/nexstock/<suite-id>/` with a snapshot of the specification it was generated from. Login credentials appear in tests only as placeholders such as `{{admin.email}}`, never as values.
+A suite is saved in `suites/nexstock/<suite-id>/` with a snapshot of the specification it was generated from. Runs are saved in `runs/nexstock/<run-id>/` (git-ignored). Login credentials appear in tests only as placeholders such as `{{admin.email}}`; the runner fills them from `.env`, and passwords and tokens are removed from saved results. Each failure has a category: API failure, generated-test error, configuration error or infrastructure error.
 
 ## Development Checks
 

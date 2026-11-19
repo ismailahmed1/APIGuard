@@ -172,10 +172,14 @@ def test_generate_requires_api_key(configured_project, monkeypatch, capsys):
     assert "ANTHROPIC_API_KEY is not set" in capsys.readouterr().err
 
 
-@pytest.mark.parametrize("command", ["run", "report"])
-def test_placeholder_commands(command, capsys):
-    assert main([command, "nexstock"]) == 2
-    assert "not implemented" in capsys.readouterr().err
+def test_run_without_saved_suite(configured_project, capsys):
+    assert main(["run", "nexstock"]) == 1
+    assert "no saved suite for nexstock" in capsys.readouterr().err
+
+
+def test_report_without_runs(configured_project, capsys):
+    assert main(["report", "nexstock"]) == 2
+    assert "cannot read run" in capsys.readouterr().err
 
 
 def test_invalid_app_name(capsys):
@@ -251,3 +255,16 @@ def test_spec_connection_error(configured_project, monkeypatch, capsys):
     monkeypatch.setattr("apiguard.openapi.httpx.get", fake_get)
     assert main(["spec", "nexstock"]) == 1
     assert "could not reach" in capsys.readouterr().err
+
+
+def test_runs_can_be_named_by_label(tmp_path, monkeypatch):
+    from apiguard import cli
+
+    monkeypatch.chdir(tmp_path)
+    for run_id, label in [("20260101-000000", "F01"), ("20260102-000000", "F01")]:
+        directory = tmp_path / "runs" / "shop" / run_id
+        directory.mkdir(parents=True)
+        (directory / "run.json").write_text(f'{{"run_id": "{run_id}", "label": "{label}"}}')
+    assert cli.resolve_run("shop", "F01") == "20260102-000000"
+    assert cli.resolve_run("shop", "20260101-000000") == "20260101-000000"
+    assert cli.resolve_run("shop", "unknown") == "unknown"
