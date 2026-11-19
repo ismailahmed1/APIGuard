@@ -19,8 +19,9 @@ APIGuard currently supports:
 - Validating required settings, HTTP URLs, and positive timeouts.
 - Checking connectivity to the configured application or specification URL.
 - Reporting configuration and connection errors with meaningful exit codes.
+- Summarizing every operation in the specification with `apiguard spec`.
 
-The `generate`, `run`, and `report` commands are placeholders and are not implemented yet. The `check` command loads and validates self-contained OpenAPI 3.0, 3.1 and 3.2 documents from JSON/YAML files or HTTP/HTTPS URLs. Endpoint extraction is planned separately.
+The `generate`, `run`, and `report` commands are placeholders and are not implemented yet. The `check` command loads and validates self-contained OpenAPI 3.0, 3.1 and 3.2 documents from JSON/YAML files or HTTP/HTTPS URLs.
 
 ## Local Setup — Windows PowerShell
 
@@ -133,6 +134,30 @@ Use a separate directory for each suite version. The snapshot helper replaces th
 Internal references (`#/components/...`) are supported. External references to other files or URLs are explicitly rejected in this first implementation, so validation cannot make additional uncontrolled requests and snapshots remain self-contained. Swagger 2.0, recursive YAML aliases, and non-JSON YAML values are unsupported. This limit can be revisited during reference-resolution work in issue #8.
 
 Validation uses `openapi-spec-validator` rather than a hand-written partial OpenAPI validator. Tests use mocked requests and temporary files; no live service is required.
+
+## Summarize NexStock Operations
+
+```powershell
+.\.venv\Scripts\apiguard.exe spec nexstock
+```
+
+The command loads and validates the specification in the same way as `check`, then prints one row for each operation. Example output for a small test specification:
+
+```text
+nexstock: 4 operations, 2 require authentication (OpenAPI 3.1.0)
+
+METHOD  PATH                        AUTH                           PARAMETERS                        BODY           RESPONSES
+POST    /api/auth/login             none                           -                                 Login (form)*  200, 422
+GET     /api/products/{product_id}  OAuth2PasswordBearer           path:product_id*, query:verbose*  -              200
+DELETE  /api/products/{product_id}  OAuth2PasswordBearer           path:product_id*, query:verbose   -              204
+GET     /api/catalog                optional:OAuth2PasswordBearer  -                                 -              200
+```
+
+A trailing `*` marks a required parameter or request body. `AUTH` lists the security schemes that the operation accepts; `optional:` means that anonymous requests are also allowed. `spec` does not check `base_url` and uses the same exit codes as `check`.
+
+The table comes from `apiguard.operations.extract_operations(document)`, which returns one `Operation` for each path and method. Each operation contains its parameters, request body, response status codes with their schemas, and security requirements. Local `$ref` references are resolved, so the generator, validator and metrics do not follow references themselves. A recursive schema keeps its inner `$ref` object instead of expanding forever. Operation parameters replace path-level parameters with the same name and location, and operation-level `security` replaces the global list.
+
+The OpenAPI document only states which operations need a token. It does not state which roles may call them, such as NexStock's Admin-only operations, so authorization tests need that information from another source.
 
 ## Development Checks
 
