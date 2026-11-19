@@ -187,6 +187,12 @@ apiguard compare nexstock original F01-products-list-without-auth
 
 `apiguard baseline nexstock --tag ... --label original` runs Schemathesis in Docker on the same operations, and `apiguard compare nexstock A B --schemathesis` compares two baseline runs. `python scripts/evaluate_faults.py` does all of this for the original app and every fault, and prints the fault-detection rate of each tool (`--show` prints the latest saved result). A fault counts as detected only when a tool reports a new failure on the operation that the fault changes. Both tools check the application against the specification snapshot of the suite.
 
+## Web UI
+
+`apiguard ui nexstock` opens a local page at http://127.0.0.1:8765/ with the same workflow: choose operation tags and generate a suite with Claude, switch NexStock between the original code and each seeded fault, run a saved suite without the AI model, compare two runs, and see the latest evaluation against Schemathesis. Task output appears live at the bottom of the page.
+
+The page runs the same CLI commands and scripts and reads the same saved files. It listens on 127.0.0.1 only, refuses requests from other sites, and accepts only those fixed actions. Stop it with Ctrl+C.
+
 ## Development Checks
 
 Run these commands before opening a pull request:

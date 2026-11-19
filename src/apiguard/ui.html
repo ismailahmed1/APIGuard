@@ -1,0 +1,557 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>APIGuard</title>
+<style>
+:root {
+  --bg: #ffffff; --sub: #f6f6f5; --text: #1b1b1b; --muted: #666662; --faint: #9a9a95;
+  --line: #e4e4e1; --line-2: #d2d2ce; --accent: #2450c8; --accent-bg: #edf1fb;
+  --ok: #1d7a3a; --bad: #b42318; --bad-bg: #fbefed; --warn: #8a6100;
+  --sans: system-ui, -apple-system, "Segoe UI", Roboto, sans-serif;
+  --mono: ui-monospace, "SF Mono", SFMono-Regular, Menlo, Consolas, monospace;
+}
+@media (prefers-color-scheme: dark) {
+  :root {
+    --bg: #131416; --sub: #1b1c1f; --text: #e4e4e2; --muted: #9b9b97; --faint: #6c6c69;
+    --line: #2a2b2f; --line-2: #3a3b40; --accent: #8aa8ff; --accent-bg: #1c2233;
+    --ok: #5cc27d; --bad: #f2867a; --bad-bg: #2a1a19; --warn: #d6aa45;
+  }
+}
+* { box-sizing: border-box; }
+html { scroll-padding-top: 60px; }
+body { margin: 0; background: var(--bg); color: var(--text); font: 14px/1.5 var(--sans); }
+code, .mono, pre, select, .num { font-family: var(--mono); }
+code { font-size: 12.5px; }
+button { font: inherit; color: inherit; }
+.num { font-variant-numeric: tabular-nums; }
+
+header {
+  position: sticky; top: 0; z-index: 10; background: var(--bg); border-bottom: 1px solid var(--line);
+}
+.bar-inner { max-width: 1040px; margin: 0 auto; padding: 12px 24px; display: flex; gap: 16px; align-items: baseline; flex-wrap: wrap; }
+.bar-inner h1 { margin: 0; font-size: 15px; font-weight: 600; }
+#appname { color: var(--muted); font: 12.5px var(--mono); }
+#chips { margin-left: auto; display: flex; gap: 18px; font-size: 12.5px; color: var(--muted); flex-wrap: wrap; }
+.pill::before { content: ""; display: inline-block; width: 7px; height: 7px; border-radius: 50%;
+  background: var(--faint); margin-right: 7px; vertical-align: 1px; }
+.pill.ok::before { background: var(--ok); }
+.pill.bad::before, .pill.fault::before { background: var(--bad); }
+.pill.warn::before { background: var(--warn); }
+.pill.fault { color: var(--bad); }
+
+main { max-width: 1040px; margin: 0 auto; padding: 8px 24px 120px; }
+.intro { color: var(--muted); margin: 20px 0 8px; max-width: 760px; }
+section { border-top: 1px solid var(--line); padding: 28px 0 32px; }
+section:first-of-type { border-top: 0; }
+.head { display: flex; gap: 16px; align-items: flex-start; margin-bottom: 16px; }
+.head h2 { margin: 0; font-size: 16px; font-weight: 600; }
+.head h2 .step { color: var(--faint); font: 500 14px var(--mono); margin-right: 10px; }
+.head p { margin: 4px 0 0; color: var(--muted); max-width: 680px; }
+.head .actions { margin-left: auto; display: flex; gap: 8px; flex: none; }
+
+.btn { border: 1px solid var(--line-2); background: var(--bg); border-radius: 6px; padding: 6px 14px;
+  font-size: 13px; font-weight: 500; cursor: pointer; white-space: nowrap; }
+.btn:hover:not(:disabled) { background: var(--sub); }
+.btn.primary { background: var(--accent); border-color: var(--accent); color: var(--bg); }
+.btn.primary:hover:not(:disabled) { background: var(--accent); filter: brightness(1.08); }
+.btn:disabled { opacity: .45; cursor: default; }
+.btn.small { padding: 3px 10px; font-size: 12.5px; }
+
+.row { display: flex; gap: 8px; flex-wrap: wrap; align-items: center; }
+.toggle { border: 1px solid var(--line-2); background: var(--bg); border-radius: 6px; padding: 4px 10px;
+  font-size: 13px; cursor: pointer; }
+.toggle .count { color: var(--faint); font: 12px var(--mono); margin-left: 4px; }
+.toggle.on { border-color: var(--accent); background: var(--accent-bg); color: var(--accent); }
+.toggle.on .count { color: inherit; }
+.hint { color: var(--muted); font-size: 12.5px; }
+label.field { color: var(--muted); font-size: 12.5px; display: inline-flex; gap: 8px; align-items: center; }
+select { font-size: 12.5px; color: var(--text); background: var(--bg); border: 1px solid var(--line-2);
+  border-radius: 6px; padding: 4px 6px; max-width: 100%; }
+.picker { margin: 22px 0 14px; }
+
+.stats { display: flex; flex-wrap: wrap; border: 1px solid var(--line); border-radius: 6px; }
+.stat { padding: 10px 16px; border-right: 1px solid var(--line); min-width: 120px; }
+.stat:last-child { border-right: 0; }
+.stat .v { font: 500 19px var(--mono); font-variant-numeric: tabular-nums; }
+.stat .k { color: var(--muted); font-size: 12px; }
+.stat.ok .v { color: var(--ok); } .stat.bad .v { color: var(--bad); }
+
+table { width: 100%; border-collapse: collapse; font-size: 13px; }
+.table { margin-top: 16px; overflow-x: auto; }
+th { text-align: left; font-weight: 500; color: var(--muted); font-size: 12px; padding: 6px 10px;
+  border-bottom: 1px solid var(--line-2); white-space: nowrap; }
+td { padding: 8px 10px; border-bottom: 1px solid var(--line); vertical-align: top; }
+td.r, th.r { text-align: right; }
+tr.clickable { cursor: pointer; }
+tr.clickable:hover td { background: var(--sub); }
+tr.detail > td { background: var(--sub); }
+tfoot td { border-bottom: 0; border-top: 1px solid var(--line-2); font-weight: 600; }
+.desc { color: var(--muted); font-size: 12.5px; }
+.method { font: 600 11.5px var(--mono); display: inline-block; min-width: 50px; color: var(--muted); }
+.meter { height: 6px; background: var(--line); border-radius: 3px; overflow: hidden; min-width: 120px; }
+.meter span { display: block; height: 100%; background: var(--muted); }
+.meter.pass { background: var(--bad-bg); } .meter.pass span { background: var(--ok); }
+.cat-api_failure { color: var(--bad); }
+.cat-test_error, .cat-configuration_error, .cat-infrastructure_error { color: var(--warn); }
+.yes { color: var(--ok); } .no { color: var(--bad); }
+.status-change { font: 12.5px var(--mono); white-space: nowrap; }
+.status-change s { color: var(--muted); }
+.status-change b { color: var(--bad); font-weight: 600; }
+.codes { display: grid; grid-template-columns: 1fr 1fr; gap: 12px; }
+.code-label { font-size: 12px; color: var(--muted); }
+pre { margin: 4px 0 0; padding: 10px 12px; background: var(--bg); border: 1px solid var(--line); border-radius: 6px;
+  font-size: 12px; line-height: 1.5; white-space: pre-wrap; word-break: break-word; max-height: 280px; overflow: auto; }
+details > summary { cursor: pointer; color: var(--accent); font-size: 13px; margin-top: 18px; }
+tr.more { display: none; }
+.show-more tr.more { display: table-row; }
+.show-more tr.more[hidden] { display: none; }
+.more-btn { margin-top: 12px; }
+
+.variant td { vertical-align: middle; }
+.variant.current td { background: var(--sub); }
+.variant .here { color: var(--ok); font-size: 12.5px; }
+.banner { border-left: 3px solid var(--line-2); padding: 6px 0 6px 14px; }
+.banner b { display: block; font-weight: 600; }
+.banner span { color: var(--muted); }
+.banner.bad { border-color: var(--bad); } .banner.bad b { color: var(--bad); }
+.banner.ok { border-color: var(--ok); }
+.empty { color: var(--muted); padding: 16px 0; }
+.note { color: var(--muted); font-size: 12.5px; margin: 12px 0 0; }
+
+#log { position: fixed; left: 0; right: 0; bottom: 0; z-index: 20; background: var(--sub);
+  border-top: 1px solid var(--line-2); }
+#log-head { max-width: 1040px; margin: 0 auto; padding: 8px 24px; display: flex; gap: 10px; align-items: center;
+  cursor: pointer; font-size: 13px; }
+#log-title { flex: 1; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; font-family: var(--mono); font-size: 12.5px; }
+#log-time, #log-toggle { color: var(--muted); font: 12px var(--mono); }
+#log pre { max-width: 1040px; margin: 0 auto 10px; height: 220px; max-height: none; background: var(--bg); }
+#log.collapsed pre { display: none; }
+.spinner { width: 11px; height: 11px; border: 1.5px solid var(--line-2); border-top-color: var(--text);
+  border-radius: 50%; display: inline-block; animation: spin .9s linear infinite; }
+@keyframes spin { to { transform: rotate(360deg); } }
+.verdict-yes { color: var(--ok); font: 12px var(--mono); } .verdict-no { color: var(--bad); font: 12px var(--mono); }
+#toast { position: fixed; top: 56px; right: 24px; z-index: 30; background: var(--bg); border: 1px solid var(--bad);
+  color: var(--bad); border-radius: 6px; padding: 8px 12px; font-size: 13px; max-width: 380px; display: none; }
+#toast.show { display: block; }
+
+@media (max-width: 700px) {
+  .bar-inner, main { padding-left: 16px; padding-right: 16px; }
+  #chips { margin-left: 0; }
+  .head { flex-wrap: wrap; } .head .actions { margin-left: 0; }
+  .codes { grid-template-columns: 1fr; }
+  .stat { min-width: 50%; border-bottom: 1px solid var(--line); }
+}
+</style>
+</head>
+<body>
+<header>
+  <div class="bar-inner">
+    <h1>APIGuard</h1>
+    <span id="appname"></span>
+    <div id="chips"></div>
+  </div>
+</header>
+
+<main>
+  <p class="intro">Claude generates a test suite once. APIGuard saves it and replays it on the original
+    application and on versions with seeded faults, without calling the AI model again.</p>
+
+  <section id="s1">
+    <div class="head">
+      <div>
+        <h2><span class="step">1</span>Generate tests</h2>
+        <p>Claude reads the selected OpenAPI operations and the seed-data notes, and writes test
+          definitions. Each definition is checked against the specification before it is saved.</p>
+      </div>
+    </div>
+    <div class="row" id="tags"></div>
+    <div class="row" style="margin-top:12px">
+      <button class="btn primary" id="generate">Generate with Claude</button>
+      <span class="hint" id="generate-hint"></span>
+    </div>
+    <div class="picker"><label class="field">Suite <select id="suite"></select></label></div>
+    <div id="suite-view"></div>
+  </section>
+
+  <section id="s2">
+    <div class="head">
+      <div>
+        <h2><span class="step">2</span>Application version</h2>
+        <p>NexStock runs in Docker with fixed seed data. Each seeded fault is one small patch to the
+          original code. Switching restarts the API container.</p>
+      </div>
+    </div>
+    <div id="variants"></div>
+  </section>
+
+  <section id="s3">
+    <div class="head">
+      <div>
+        <h2><span class="step">3</span>Run the suite</h2>
+        <p>Resets the seed data, logs in as each role and replays every saved request. The AI key is
+          removed from the run's environment.</p>
+      </div>
+      <div class="actions"><button class="btn primary" id="run">Run</button></div>
+    </div>
+    <div class="picker"><label class="field">Run <select id="run-select"></select></label></div>
+    <div id="run-view"></div>
+  </section>
+
+  <section id="s4">
+    <div class="head">
+      <div>
+        <h2><span class="step">4</span>Compare runs</h2>
+        <p>A fault is detected when a test that passes on the original application fails on the
+          faulted version.</p>
+      </div>
+    </div>
+    <div class="row">
+      <label class="field">Original <select id="base"></select></label>
+      <label class="field">Compared <select id="other"></select></label>
+    </div>
+    <div style="margin-top:18px" id="compare-view"></div>
+  </section>
+
+  <section id="s5">
+    <div class="head">
+      <div>
+        <h2><span class="step">5</span>Evaluation against Schemathesis</h2>
+        <p>Both tools run on the original application and on each seeded fault, using the same
+          specification snapshot.</p>
+      </div>
+      <div class="actions"><button class="btn" id="evaluate">Run evaluation</button></div>
+    </div>
+    <div id="evaluation-view"></div>
+  </section>
+</main>
+
+<div id="log" class="collapsed">
+  <div id="log-head">
+    <span id="log-icon"></span>
+    <span id="log-title">No task has run yet</span>
+    <span id="log-time"></span>
+    <span id="log-toggle">show log</span>
+  </div>
+  <pre id="log-body"></pre>
+</div>
+<div id="toast"></div>
+
+<script>
+const $ = (id) => document.getElementById(id);
+const esc = (s) => String(s ?? "").replace(/[&<>"']/g, (c) =>
+  ({"&": "&amp;", "<": "&lt;", ">": "&gt;", '"': "&quot;", "'": "&#39;"}[c]));
+const TYPES = {happy_path: "Happy path", schema_validation: "Schema validation",
+  authentication: "Authentication", boundary_value: "Boundary value"};
+const typeName = (t) => TYPES[t] || t;
+const CATEGORY = {api_failure: "API failure", test_error: "Generated-test error",
+  configuration_error: "Configuration error", infrastructure_error: "Infrastructure error"};
+let state = null, selectedTags = null, polling = null, lastJobId = null;
+const ui = {suite: null, run: null, base: null, other: null};
+
+async function api(path, body) {
+  const response = await fetch(path, body ? {method: "POST",
+    headers: {"Content-Type": "application/json"}, body: JSON.stringify(body)} : {});
+  const data = await response.json();
+  if (!response.ok) throw new Error(data.error || response.statusText);
+  return data;
+}
+function toast(text) {
+  const t = $("toast"); t.textContent = text; t.classList.add("show");
+  clearTimeout(toast.timer); toast.timer = setTimeout(() => t.classList.remove("show"), 5000);
+}
+const pct = (a, b) => (b ? Math.round(100 * a / b) : 0);
+const meter = (a, b, cls = "") => `<div class="meter ${cls}"><span style="width:${b ? 100 * a / b : 0}%"></span></div>`;
+const stat = (v, k, cls = "") => `<div class="stat ${cls}"><div class="v">${esc(v)}</div><div class="k">${esc(k)}</div></div>`;
+function variantInfo(id) { return state && state.variants.find((x) => x.id === id); }
+function variantName(id) {
+  if (id === "original") return "original";
+  const v = variantInfo(id);
+  return v ? `${id.slice(0, 3)} (${v.category})` : id || "no label";
+}
+function runName(run) {
+  return `${run.run_id}  ${variantName(run.label)}  ${run.outcomes.passed || 0}/${run.total} passed`;
+}
+const method = (m) => `<span class="method">${esc(m)}</span>`;
+function operation(op) {
+  const [m, ...path] = String(op).split(" ");
+  return `${method(m)}<code>${esc(path.join(" "))}</code>`;
+}
+function suiteRuns() { return state.runs.filter((r) => r.suite_id === ui.suite); }
+// The latest run on the original app with the same suite as the compared run.
+function matchingBase(otherId) {
+  return suiteRuns().find((r) => r.label === "original" && r.run_id !== otherId);
+}
+
+async function refresh() {
+  state = await api("/api/state");
+  render();
+  if (state.job && state.job.status === "running") startPolling();
+}
+
+function render() {
+  const busy = state.job && state.job.status === "running";
+  $("appname").textContent = `${state.app}  ${state.base_url}`;
+  const v = state.variant;
+  $("chips").innerHTML = [
+    `<span class="pill ${state.reachable ? "ok" : "bad"}">${state.reachable ? "API reachable" : "API not reachable"}</span>`,
+    `<span class="pill ${v && v !== "original" ? "fault" : "ok"}">Running ${esc(v ? variantName(v) : "unknown")}</span>`,
+    `<span class="pill ${state.has_ai_key ? "ok" : "warn"}">${state.has_ai_key ? "Claude key set" : "No Claude key"}</span>`,
+  ].join("");
+
+  if (selectedTags === null) {
+    const latest = state.suites.find((x) => x.id === state.latest_suite) || state.suites[0];
+    selectedTags = new Set(latest ? latest.tags : []);
+  }
+  $("tags").innerHTML = state.tags.map((t) =>
+    `<button class="toggle ${selectedTags.has(t.name) ? "on" : ""}" data-tag="${esc(t.name)}">` +
+    `${esc(t.name)} <span class="count">${t.operations}</span></button>`).join("") ||
+    `<span class="hint">No operations found.</span>`;
+  const ops = state.tags.filter((t) => selectedTags.has(t.name)).reduce((a, t) => a + t.operations, 0);
+  $("generate-hint").textContent = state.has_ai_key
+    ? `${selectedTags.size} tags, ${ops} operations. About $0.10 per tag.` : "Add ANTHROPIC_API_KEY to .env first.";
+  $("generate").disabled = busy || !state.has_ai_key || selectedTags.size === 0;
+
+  fillSelect("suite", state.suites.map((s) => [s.id,
+    `${s.id}  ${s.counts.valid ?? "?"} tests  ${s.tags.join(", ")}`]), "suite", state.latest_suite);
+
+  $("variants").innerHTML = `<div class="table"><table>
+    <tr><th>Version</th><th>Change</th><th>Changed operation</th><th></th></tr>
+    ${state.variants.map((x) => {
+      const orig = x.id === "original", here = x.id === v;
+      return `<tr class="variant ${here ? "current" : ""}">
+        <td><code>${esc(orig ? "original" : x.id.slice(0, 3))}</code></td>
+        <td>${esc(orig ? "None (pinned upstream commit)" : x.category)}</td>
+        <td>${x.operation ? operation(x.operation) : `<span class="desc">–</span>`}</td>
+        <td class="r">${here ? `<span class="here">running</span>` :
+          `<button class="btn small" data-variant="${esc(x.id)}" ${busy ? "disabled" : ""}>Switch</button>`}</td></tr>`;
+    }).join("")}</table></div>`;
+
+  $("run").textContent = `Run on ${v ? variantName(v) : "the app"}`;
+  $("run").disabled = busy || !ui.suite || !state.reachable;
+  const runOptions = suiteRuns().map((r) => [r.run_id, runName(r)]);
+  fillSelect("run-select", runOptions, "run");
+  fillSelect("other", runOptions, "other", runOptions[0] && runOptions[0][0]);
+  const base = matchingBase(ui.other);
+  fillSelect("base", runOptions, "base", base && base.run_id);
+  $("evaluate").textContent = "Run evaluation (about 2.5 min)";
+  $("evaluate").disabled = busy || !ui.suite;
+
+  renderEvaluation();
+  loadSuite(); loadRun(); loadCompare();
+}
+
+function fillSelect(id, options, key, preferred) {
+  const select = $(id);
+  if (!options.some(([v]) => v === ui[key])) ui[key] = preferred || (options[0] || [null])[0];
+  select.innerHTML = options.map(([v, text]) =>
+    `<option value="${esc(v)}" ${v === ui[key] ? "selected" : ""}>${esc(text)}</option>`).join("") ||
+    `<option>none yet</option>`;
+}
+
+const cache = {};
+async function cached(path) { return cache[path] ||= await api(path); }
+
+async function loadSuite() {
+  if (!ui.suite) return ($("suite-view").innerHTML = `<div class="empty">No suite yet. Select tags and generate one.</div>`);
+  const {metadata: m, tests, excluded} = await cached(`/api/suite?id=${ui.suite}`);
+  const u = m.ai_usage || {};
+  const types = Object.keys(TYPES).map((t) => [t, tests.filter((x) => x.type === t).length]).filter(([, n]) => n);
+  $("suite-view").innerHTML = `
+    <div class="stats">
+      ${stat(tests.length, "valid tests")}
+      ${stat(m.operations.length, "operations")}
+      ${stat(excluded.length, "rejected by validator")}
+      ${stat(u.cost_usd != null ? "$" + u.cost_usd.toFixed(2) : "?", `${u.calls} Claude calls, ${m.generation_seconds} s`)}
+    </div>
+    <div class="table"><table>
+      <tr><th>Test type</th><th class="r">Tests</th><th class="r">Share</th><th style="width:40%"></th></tr>
+      ${types.map(([t, n]) => `<tr><td>${typeName(t)}</td><td class="r num">${n}</td>
+        <td class="r num">${pct(n, tests.length)}%</td><td>${meter(n, tests.length)}</td></tr>`).join("")}
+    </table></div>
+    ${excluded.length ? `<div class="table"><table><tr><th>Rejected test</th><th>Reason</th></tr>${excluded.map((e) =>
+      `<tr><td><code>${esc(e.test.id)}</code></td><td>${esc(e.reason)}</td></tr>`).join("")}</table></div>` : ""}
+    <details><summary>All ${tests.length} tests</summary>
+      <div class="table"><table><tr><th>Test</th><th>Type</th><th>Request</th><th>Role</th><th class="r">Expects</th></tr>
+      ${tests.map((t, i) => `<tr class="clickable" data-test="${i}"><td><code>${esc(t.id)}</code><div class="desc">${esc(t.description)}</div></td>
+        <td>${esc(typeName(t.type))}</td>
+        <td>${method(t.method)}<code>${esc(t.path)}</code></td><td>${esc(t.role)}</td>
+        <td class="r"><code>${t.expected_status}</code></td></tr>
+        <tr hidden class="detail" id="test-${i}"><td colspan="5"><pre>${esc(JSON.stringify(
+          {path_params: t.path_params, query_params: t.query_params, body: t.body}, null, 2))}</pre></td></tr>`
+      ).join("")}</table></div></details>`;
+}
+
+const SHOWN = 6;  // Failures shown before "Show all".
+async function loadRun() {
+  if (!ui.run) return ($("run-view").innerHTML = `<div class="empty">No runs of this suite yet.</div>`);
+  const {run, results} = await cached(`/api/run?id=${ui.run}`);
+  $("run-view").classList.remove("show-more");
+  const o = run.outcomes, passed = o.passed || 0;
+  const rows = Object.keys(TYPES).map((t) => {
+    const of = results.filter((r) => r.type === t);
+    if (!of.length) return "";
+    const p = of.filter((r) => r.outcome === "passed").length;
+    return `<tr><td>${typeName(t)}</td><td class="r num">${p}/${of.length}</td>
+      <td class="r num">${pct(p, of.length)}%</td><td>${meter(p, of.length, "pass")}</td></tr>`;
+  }).join("");
+  const problems = results.filter((r) => r.outcome !== "passed");
+  $("run-view").innerHTML = `
+    <div class="stats">
+      ${stat(`${passed}/${run.total}`, `passed (${pct(passed, run.total)}%)`, "ok")}
+      ${stat(o.failed || 0, "failed", o.failed ? "bad" : "")}
+      ${stat(`${run.seconds} s`, `${run.requests} requests, ${run.resets} resets`)}
+      ${stat(run.ai_model_used ? "yes" : "0", "AI model calls")}
+    </div>
+    <div class="table"><table>
+      <tr><th>Test type</th><th class="r">Passed</th><th class="r">Rate</th><th style="width:40%"></th></tr>${rows}
+    </table></div>
+    ${problems.length ? `<div class="table"><table><tr><th>Category</th><th>Test</th><th>Operation</th><th>Role</th><th>Result</th></tr>
+      ${problems.map((r, i) => `<tr class="clickable ${i >= SHOWN ? "more" : ""}" data-result="${i}">
+        <td class="cat-${esc(r.category)}">${esc(CATEGORY[r.category] || r.outcome)}</td>
+        <td><code>${esc(r.id)}</code><div class="desc">${esc(r.description)}</div></td><td>${operation(r.operation)}</td>
+        <td>${esc(r.role)}</td><td>${esc(r.detail)}</td></tr>
+        <tr hidden class="detail ${i >= SHOWN ? "more" : ""}" id="result-${i}"><td colspan="5"><div class="codes">
+          <div><span class="code-label">Request</span><pre>${esc(JSON.stringify(r.request, null, 2))}</pre></div>
+          <div><span class="code-label">Response, HTTP ${esc(r.actual && r.actual.status)}</span><pre>${esc(r.actual && r.actual.body_excerpt)}</pre></div>
+        </div></td></tr>`).join("")}</table></div>
+      ${problems.length > SHOWN ? `<button class="btn more-btn" id="more-failures">Show all ${problems.length} failures</button>` : ""}`
+      : `<p class="note">Every test passed.</p>`}`;
+}
+
+function statusChange(r) {
+  const expected = r.expected && typeof r.expected === "object" ? r.expected.status : r.expected;
+  if (!r.actual || r.actual.status == null || expected == null) return esc(r.detail);
+  return `<span class="status-change"><s>${esc(expected)}</s> → <b>${esc(r.actual.status)}</b></span>`;
+}
+
+async function loadCompare() {
+  const base = state.runs.find((r) => r.run_id === ui.base);
+  const other = state.runs.find((r) => r.run_id === ui.other);
+  const hint = (text) => ($("compare-view").innerHTML = `<div class="empty">${text}</div>`);
+  if (!base || !other) return hint("Run this suite on the original application and on a faulted version to compare.");
+  if (base.run_id === other.run_id || other.label === "original")
+    return hint("Switch to a seeded fault in step 2 and run the suite again to compare.");
+  const c = await cached(`/api/compare?base=${ui.base}&other=${ui.other}`);
+  const v = variantInfo(c.other.label);
+  const name = esc(variantName(c.other.label));
+  $("compare-view").innerHTML = (c.detected.length
+    ? `<div class="banner bad"><b>Fault detected: ${name}</b>
+        <span>${c.detected.length} ${c.detected.length === 1 ? "test passes" : "tests pass"} on the original application and fail${c.detected.length === 1 ? "s" : ""} on this version.${v && v.operation ? ` The fault changes <code>${esc(v.operation)}</code>.` : ""}</span></div>
+       <div class="table"><table><tr><th>Test</th><th>Type</th><th>Operation</th><th>Status (expected → received)</th></tr>${c.detected.map((r) =>
+        `<tr><td><code>${esc(r.id)}</code><div class="desc">${esc(r.description)}</div></td>
+         <td>${esc(typeName(r.type))}</td><td>${operation(r.operation)}</td><td>${statusChange(r)}</td></tr>`).join("")}</table></div>`
+    : `<div class="banner ok"><b>No change on ${name}</b><span>No test changed from passed to failed.</span></div>`) +
+    (c.existing ? `<p class="note">${c.existing} tests also fail on the original application. These are existing defects and are not counted.</p>` : "");
+}
+
+function renderEvaluation() {
+  const e = state.evaluation;
+  if (!e || !e.faults) return ($("evaluation-view").innerHTML = `<div class="empty">No saved evaluation yet.</div>`);
+  const n = e.faults.length;
+  const found = (tool) => e.faults.filter((f) => f[tool].detected).length;
+  const orig = e.original_failing_operations;
+  const cell = (v) => {
+    const extra = v.text.includes("(") ? ` <span class="desc">${esc(v.text.slice(v.text.indexOf("(")))}</span>` : "";
+    return `<span class="${v.detected ? "yes" : "no"}">${v.detected ? "detected" : "missed"}</span>${extra}`;
+  };
+  $("evaluation-view").innerHTML = `
+    <div class="table"><table>
+      <tr><th>Fault</th><th>Category</th><th>Changed operation</th><th>APIGuard</th><th>Schemathesis</th></tr>
+      ${e.faults.map((f) => `<tr><td><code>${esc(f.id.slice(0, 3))}</code></td><td>${esc(f.category)}</td>
+        <td>${operation(f.operation)}</td><td>${cell(f.apiguard)}</td><td>${cell(f.schemathesis)}</td></tr>`).join("")}
+      <tfoot>
+        <tr><td colspan="3">Faults detected</td><td class="num">${found("apiguard")}/${n}</td><td class="num">${found("schemathesis")}/${n}</td></tr>
+        ${orig ? `<tr><td colspan="3">Operations failing on the original application</td><td class="num">${orig.apiguard}</td><td class="num">${orig.schemathesis}</td></tr>` : ""}
+      </tfoot>
+    </table></div>
+    <p class="note">A fault counts as detected only when a tool reports a new failure on the operation that the
+      fault changes. APIGuard suite ${esc(e.suite_id)} (${e.tests || "?"} tests). Saved in ${esc(e.file)}.</p>`;
+}
+
+async function start(body) {
+  try {
+    await api("/api/start", body);
+    setLog(true);
+    await refresh();
+    startPolling();
+  } catch (err) { toast(err.message); }
+}
+
+function startPolling() {
+  if (polling) return;
+  polling = setInterval(async () => {
+    const job = await api("/api/job");
+    showJob(job);
+    if (job && job.status !== "running") {
+      clearInterval(polling); polling = null;
+      for (const k of Object.keys(cache)) delete cache[k];
+      if (job.action === "run") ui.run = null;  // Show the new run.
+      if (job.action === "generate") ui.suite = ui.run = ui.base = ui.other = null;
+      await refresh();
+      if (job.action === "run" && state.runs[0]) {
+        ui.run = ui.other = state.runs[0].run_id;
+        const base = matchingBase(ui.other);
+        if (base) ui.base = base.run_id;
+        render();
+      }
+      if (job.action === "generate" && state.suites[0]) { ui.suite = state.suites[0].id; render(); }
+      if (job.status === "failed") toast(`Task failed: ${job.title}`);
+    }
+  }, 1000);
+}
+
+function setLog(open) {
+  $("log").classList.toggle("collapsed", !open);
+  $("log-toggle").textContent = open ? "hide log" : "show log";
+}
+
+function showJob(job) {
+  if (!job) return;
+  const running = job.status === "running";
+  $("log-icon").innerHTML = running ? `<span class="spinner"></span>` :
+    job.status === "done" ? `<span class="verdict-yes">done</span>` : `<span class="verdict-no">failed</span>`;
+  $("log-title").textContent = job.title;
+  $("log-time").textContent = `${job.seconds} s`;
+  const body = $("log-body");
+  const atBottom = body.scrollTop + body.clientHeight >= body.scrollHeight - 20;
+  body.textContent = job.log.join("\n");
+  if (atBottom || job.id !== lastJobId) body.scrollTop = body.scrollHeight;
+  lastJobId = job.id;
+}
+
+document.addEventListener("click", (event) => {
+  if (event.target.id === "more-failures") {
+    $("run-view").classList.add("show-more");
+    event.target.remove();
+    return;
+  }
+  const t = event.target.closest("[data-tag],[data-variant],[data-test],[data-result]");
+  if (!t || t.disabled) return;
+  if (t.dataset.tag) {
+    selectedTags.has(t.dataset.tag) ? selectedTags.delete(t.dataset.tag) : selectedTags.add(t.dataset.tag);
+    render();
+  } else if (t.dataset.variant) {
+    start({action: "variant", variant: t.dataset.variant});
+  } else {
+    const row = $((t.dataset.test !== undefined ? "test-" : "result-") + (t.dataset.test ?? t.dataset.result));
+    row.hidden = !row.hidden;
+  }
+});
+$("generate").onclick = () => start({action: "generate", tags: [...selectedTags]});
+$("run").onclick = () => start({action: "run", suite: ui.suite});
+$("evaluate").onclick = () => start({action: "evaluate", suite: ui.suite});
+for (const [id, key, loader] of [["suite", "suite", loadSuite], ["run-select", "run", loadRun],
+    ["base", "base", loadCompare], ["other", "other", loadCompare]]) {
+  $(id).onchange = (e) => {
+    ui[key] = e.target.value;
+    if (key === "suite") { ui.run = ui.base = ui.other = null; render(); }
+    else loader();
+  };
+}
+$("log-head").onclick = () => setLog($("log").classList.contains("collapsed"));
+refresh().then(async () => showJob(await api("/api/job")));
+</script>
+</body>
+</html>
