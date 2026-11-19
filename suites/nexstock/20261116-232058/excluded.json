@@ -1,0 +1,32 @@
+[
+  {
+    "test": {
+      "id": "inventory-stockin-not-found",
+      "type": "happy_path",
+      "description": "Stock in for a non-existent product returns 404",
+      "method": "POST",
+      "path": "/api/inventory/stock-in",
+      "role": "admin",
+      "path_params": [],
+      "query_params": [],
+      "body_json": "{\"product_id\": 999, \"quantity\": 10}",
+      "expected_status": 404
+    },
+    "reason": "expected status 404 is not documented for this operation"
+  },
+  {
+    "test": {
+      "id": "inventory-stockout-not-found",
+      "type": "happy_path",
+      "description": "Stock out for a non-existent product returns 404",
+      "method": "POST",
+      "path": "/api/inventory/stock-out",
+      "role": "admin",
+      "path_params": [],
+      "query_params": [],
+      "body_json": "{\"product_id\": 999, \"quantity\": 1}",
+      "expected_status": 404
+    },
+    "reason": "expected status 404 is not documented for this operation"
+  }
+]

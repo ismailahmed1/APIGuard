@@ -20,8 +20,9 @@ APIGuard currently supports:
 - Checking connectivity to the configured application or specification URL.
 - Reporting configuration and connection errors with meaningful exit codes.
 - Summarizing every operation in the specification with `apiguard spec`.
+- Generating test suites with Claude, validating them and saving them with `apiguard generate`.
 
-The `generate`, `run`, and `report` commands are placeholders and are not implemented yet. The `check` command loads and validates self-contained OpenAPI 3.0, 3.1 and 3.2 documents from JSON/YAML files or HTTP/HTTPS URLs.
+The `run` and `report` commands are placeholders and are not implemented yet. The `check` command loads and validates self-contained OpenAPI 3.0, 3.1 and 3.2 documents from JSON/YAML files or HTTP/HTTPS URLs.
 
 ## Local Setup — Windows PowerShell
 
@@ -64,7 +65,7 @@ It defines:
 
 The current `check` command uses the request timeout. Authentication, database resets, and total-run timeout enforcement are not implemented by this command.
 
-Keep actual credentials out of tracked configuration files. `.env.example` documents the intended environment-variable names; the current CLI does not automatically load a `.env` file.
+Keep actual credentials out of tracked configuration files. `.env.example` lists the environment variables. The CLI reads a git-ignored `.env` file in the current directory; variables that are already set take priority.
 
 ## Run NexStock in Docker
 
@@ -158,6 +159,16 @@ A trailing `*` marks a required parameter or request body. `AUTH` lists the secu
 The table comes from `apiguard.operations.extract_operations(document)`, which returns one `Operation` for each path and method. Each operation contains its parameters, request body, response status codes with their schemas, and security requirements. Local `$ref` references are resolved, so the generator, validator and metrics do not follow references themselves. A recursive schema keeps its inner `$ref` object instead of expanding forever. Operation parameters replace path-level parameters with the same name and location, and operation-level `security` replaces the global list.
 
 The OpenAPI document only states which operations need a token. It does not state which roles may call them, such as NexStock's Admin-only operations, so authorization tests need that information from another source.
+
+## Generate Tests
+
+`apiguard generate` sends the extracted operations and `apps/nexstock/context.md` to Claude and asks for structured test definitions (happy path, schema validation, authentication and boundary value). APIGuard validates every definition against the specification before it saves it, and records why it excluded the others. Set `ANTHROPIC_API_KEY` in the git-ignored `.env` file. The `generation.limits` section in the configuration caps calls, output tokens and estimated cost.
+
+```bash
+apiguard generate nexstock --tag Authentication --tag Categories --tag Products --tag Inventory
+```
+
+A suite is saved in `suites/nexstock/<suite-id>/` with a snapshot of the specification it was generated from. Login credentials appear in tests only as placeholders such as `{{admin.email}}`, never as values.
 
 ## Development Checks
 
