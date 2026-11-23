@@ -210,3 +210,18 @@ To check formatting without changing files:
 ```
 
 Configuration and CLI tests use temporary files and simulated HTTP responses. They do not require Docker, a running NexStock instance, or AI credentials.
+
+## Run the Full Stack FastAPI Template
+
+Start Docker Desktop, then run these commands from the APIGuard repository root:
+
+```powershell
+git submodule update --init apps/template/upstream
+.\.venv\Scripts\python.exe apps/template/manage.py start
+.\.venv\Scripts\apiguard.exe check template
+.\.venv\Scripts\apiguard.exe run template --suite smoke
+```
+
+The template uses port 8011. The first start saves a copy of its initial database.
+APIGuard restores that copy before running the saved health test. Run
+`python apps/template/manage.py logs` to check recent health-request logs.

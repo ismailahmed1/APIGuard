@@ -1,0 +1,16 @@
+name: template
+base_url: http://127.0.0.1:8011
+spec_location: http://127.0.0.1:8011/api/v1/openapi.json
+
+timeouts:
+  request_seconds: 10
+  run_seconds: 120
+
+auth:
+  roles: {}
+
+reset:
+  command:
+    - python
+    - apps/template/manage.py
+    - reset
