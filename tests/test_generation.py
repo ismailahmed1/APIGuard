@@ -1,4 +1,5 @@
 import contextlib
+import hashlib
 import json
 from types import SimpleNamespace
 
@@ -122,7 +123,14 @@ def test_generate_suite_validates_and_saves(tmp_path):
     assert [t["id"] for t in tests] == ["auth-001", "products-001"]
     excluded = json.loads((directory / "excluded.json").read_text())
     assert excluded[0]["reason"] == "no operation POST /api/nowhere in the specification"
-    assert (directory / "openapi.yaml").read_bytes() == json.dumps(SHOP).encode()
+    snapshot = (directory / "openapi.yaml").read_bytes()
+    assert snapshot == json.dumps(SHOP).encode()
+
+    expected_hash = hashlib.sha256(snapshot).hexdigest()
+    saved_hash = (directory / "openapi.sha256").read_text(encoding="ascii").strip()
+    saved_suite = json.loads((directory / "suite.json").read_text(encoding="utf-8"))
+    assert saved_hash == expected_hash
+    assert saved_suite["spec_sha256"] == expected_hash
     assert (tmp_path / "shop" / "LATEST").read_text().strip() == metadata["suite_id"]
 
 
