@@ -14,6 +14,8 @@ def load_config(path):
 
     try:
         text = path.read_text(encoding="utf-8")
+    except UnicodeDecodeError as exc:
+        raise ConfigError(f"Configuration file must be saved as UTF-8: {path}") from exc
     except OSError as exc:
         raise ConfigError(f"Cannot read configuration file: {path}") from exc
 
