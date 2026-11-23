@@ -1,0 +1,11 @@
+services:
+  backend:
+    image: apiguard-template-backend:local
+    ports:
+      - "127.0.0.1:8011:8000"
+    command:
+      - bash
+      - -ec
+      - |
+        bash scripts/prestart.sh
+        exec fastapi run --workers 1

@@ -1,0 +1,3 @@
+[submodule "apps/template/upstream"]
+	path = apps/template/upstream
+	url = https://github.com/fastapi/full-stack-fastapi-template.git
