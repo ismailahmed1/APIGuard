@@ -133,7 +133,7 @@ A connection error is expected when NexStock is not running. Validation errors i
 
 `apiguard.openapi.load_spec(location, timeout)` returns a validated document and its original bytes. `save_snapshot(spec, suite_directory)` writes those bytes to `openapi.yaml` and their SHA-256 digest to `openapi.sha256`. JSON input also uses the `.yaml` extension because JSON is valid YAML. The digest covers the exact saved bytes, including whitespace and comments.
 
-Use a separate directory for each suite version. The snapshot helper replaces the two snapshot files when called again for the same directory. It does not make the two writes atomic. The future generator must call it when saving each suite; `check` does not create a suite or snapshot.
+Use a separate directory for each suite version. The snapshot helper replaces the two snapshot files when called again for the same directory. It does not make the two writes atomic. When `apiguard generate` saves a suite, it writes the original specification to `openapi.yaml`, saves its SHA-256 fingerprint in `openapi.sha256`, and records the same fingerprint in `suite.json`. The `check` command only validates connectivity and the specification.
 
 Internal references (`#/components/...`) are supported. External references to other files or URLs are explicitly rejected in this first implementation, so validation cannot make additional uncontrolled requests and snapshots remain self-contained. Swagger 2.0, recursive YAML aliases, and non-JSON YAML values are unsupported. This limit can be revisited during reference-resolution work in issue #8.
 
