@@ -14,6 +14,6 @@
 - id: F05-products-ignore-category-filter
   category: Business-logic and semantic testing
   operation: GET /api/products
-- id: F06-stock-out-allows-insufficient-stock
-  category: Boundary and workflow testing
-  operation: POST /api/inventory/stock-out
+- id: F06-product-delete-no-effect
+  category: Stateful workflow testing
+  operation: DELETE /api/products/{product_id}

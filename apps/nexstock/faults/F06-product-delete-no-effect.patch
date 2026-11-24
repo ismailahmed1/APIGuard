@@ -1,0 +1,10 @@
+--- a/backend/app/services/product_service.py
++++ b/backend/app/services/product_service.py
+@@ -116,7 +116,6 @@
+         """Soft deletes a product."""
+         # Ensure it exists first
+         self.get_product_by_id(db, product_id)
+-        product_repository.soft_delete(db, product_id)
+ 
+ 
+ # Singleton instance
