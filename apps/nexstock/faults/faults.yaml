@@ -8,3 +8,12 @@
 - id: F03-product-negative-price-accepted
   category: Input validation removed
   operation: POST /api/products
+- id: F04-category-delete-manager-allowed
+  category: Broken authorization
+  operation: DELETE /api/categories/{category_id}
+- id: F05-products-ignore-category-filter
+  category: Business-logic and semantic testing
+  operation: GET /api/products
+- id: F06-product-delete-no-effect
+  category: Stateful workflow testing
+  operation: DELETE /api/products/{product_id}

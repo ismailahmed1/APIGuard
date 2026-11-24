@@ -1,0 +1,11 @@
+--- a/backend/app/api/categories.py
++++ b/backend/app/api/categories.py
+@@ -82,7 +82,7 @@
+ def delete_category(
+     category_id: int,
+     db: Session = Depends(get_db),
+-    current_user: dict = Depends(RoleChecker(["Admin"])),
++    current_user: dict = Depends(RoleChecker(["Admin", "Manager"])),
+ ) -> dict:
+     """
+     Deletes an existing category.

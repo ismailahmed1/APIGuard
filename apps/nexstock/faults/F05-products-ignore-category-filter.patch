@@ -1,0 +1,11 @@
+--- a/backend/app/api/products.py
++++ b/backend/app/api/products.py
+@@ -21,7 +21,7 @@
+     Retrieves all active products, with optional category filtering.
+     Protected: Requires valid JWT.
+     """
+-    products = product_service.get_all_products(db, category_id)
++    products = product_service.get_all_products(db)
+     serialized_data = [ProductOut.model_validate(p) for p in products]
+     return success_response(
+         data=serialized_data, message="Products retrieved successfully"
