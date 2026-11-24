@@ -1,3 +1,6 @@
 [submodule "apps/template/upstream"]
 	path = apps/template/upstream
 	url = https://github.com/fastapi/full-stack-fastapi-template.git
+[submodule "apps/tasks/upstream"]
+	path = apps/tasks/upstream
+	url = https://github.com/oleksii-shcherbak/task-management-api.git
