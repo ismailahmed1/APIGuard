@@ -1,0 +1,16 @@
+name: tasks
+base_url: http://127.0.0.1:8012
+spec_location: http://127.0.0.1:8012/openapi.json
+timeouts:
+  request_seconds: 10
+  run_seconds: 180
+auth:
+  login_path: /api/v1/auth/login
+  token_path: access_token
+  username_field: identifier
+  roles:
+    member:
+      email_env: TASKS_MEMBER_EMAIL
+      password_env: TASKS_MEMBER_PASSWORD
+reset:
+  command: [python, apps/tasks/manage.py, reset]
