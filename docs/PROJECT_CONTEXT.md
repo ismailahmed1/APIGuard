@@ -39,7 +39,7 @@ The first prototype will use NexStock. The team will try both direct Pytest-file
 - Should failure classification be rule-based, AI-assisted or a combination of both?
 - What application context, beyond the OpenAPI specification, is needed to classify failures accurately?
 - Should APIGuard generate Pytest files directly or generate structured test definitions first?
-- Which AI model and provider should be used?
+- Which AI model and provider should be used after comparative evaluation of the prototype?
 - How will logs be collected and standardized across different FastAPI applications?
 
 ## Design Decision Log
@@ -49,3 +49,30 @@ Record important decisions here as they are made. Each entry should include the 
 | Date | Decision | Alternatives Considered | Reason |
 |---|---|---|---|
 | 2026-11-24 | Use F06 for product deletion that reports success while leaving the product available. Preserve authentication and missing-product checks. | Stock-out accepting insufficient stock | Evaluate stateful workflow checks that verify persisted state after a successful response. |
+| 2026-11-25 | Retain Anthropic/Claude for the prototype, with `claude-opus-5-5` and medium effort as configured in `configs/nexstock.yaml` (Issue #10). | Other Claude models, other hosted providers, or a locally hosted model. | The existing Anthropic adapter already supports streamed responses, JSON-schema output, prompt caching and usage accounting needed by the structured-definition prototype. Keeping it avoids another integration while evaluating test generation. This is a practical prototype choice, not evidence that this model is best; no comparative model benchmarks establish that here. |
+
+### AI usage limits and records (Issue #10)
+
+`AIClient` checks cumulative usage before each generation request. NexStock currently sets
+`max_calls: 10`, `max_output_tokens: 150000` and `max_cost_usd: 5.00`. Once a recorded
+value reaches its threshold, the next generation request is blocked. The generator then
+validates and saves the tests already returned, including valid tests from the response
+that reached or exceeded a threshold, and records `stopped_reason` in `suite.json`.
+
+These are checks between requests. An in-flight request is not interrupted, and its output
+tokens or estimated cost can exceed the remaining allowance. The request's `max_tokens`
+is a separate per-response limit; it is not reduced to the remaining cumulative allowance.
+The estimated spending threshold is therefore not a guaranteed hard cap.
+
+Each saved `suite.json` contains `generation_seconds` for the generation loop and `ai_usage`
+with calls, input/output tokens, cache-write/read tokens, request time (`seconds`) and
+estimated `cost_usd`. Cost uses the local per-model price table and includes cache usage;
+it is not a billing record. Calls and tokens are recorded for completed responses, including
+unusable answers. SDK retries, server-side fallback attempts and requests that fail without
+returning usage are not separately accounted for. Fallback billing may differ from the
+configured model's estimate. For models absent from the price table, cost is `null` and the
+cost threshold cannot be enforced; support for enforcing it on unpriced models remains open.
+
+Generation tests inject `FakeAnthropic`, remove AI credentials and reject construction of
+the real SDK client. They verify all three limits preserve saved valid tests, including
+token/cost overshoot, and verify saved usage and timing without making model calls.

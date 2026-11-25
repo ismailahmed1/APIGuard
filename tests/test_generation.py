@@ -6,12 +6,23 @@ from types import SimpleNamespace
 import pytest
 from shop_spec import SHOP, raw_test
 
-from apiguard.ai import AIClient, AIError, Usage
+from apiguard.ai import AIClient, AIError, LimitReached, Usage
 from apiguard.generator import TEST_SCHEMA, generate_suite, select_operations
 from apiguard.openapi import LoadedSpec
 from apiguard.operations import extract_operations
 
 OPERATIONS = extract_operations(SHOP)
+
+
+@pytest.fixture(autouse=True)
+def no_real_ai_client(monkeypatch):
+    monkeypatch.delenv("ANTHROPIC_API_KEY", raising=False)
+    monkeypatch.delenv("ANTHROPIC_AUTH_TOKEN", raising=False)
+
+    def unexpected_client(*args, **kwargs):
+        pytest.fail("Generation tests must inject a fake AI client.")
+
+    monkeypatch.setattr("apiguard.ai.anthropic.Anthropic", unexpected_client)
 
 
 class FakeAnthropic:
@@ -94,7 +105,7 @@ def generate(tmp_path, ai, tags=("Products", "Auth")):
     )
 
 
-def test_generate_suite_validates_and_saves(tmp_path):
+def test_generate_suite_validates_and_saves(tmp_path, monkeypatch):
     login = raw_test(
         id="auth-001",
         path="/api/auth/login",
@@ -106,6 +117,9 @@ def test_generate_suite_validates_and_saves(tmp_path):
     fake = FakeAnthropic(
         [reply(login), reply(raw_test(), raw_test(id="products-002", path="/api/nowhere"))]
     )
+    # Shared monotonic clock: loop start, each request's start/end, loop end.
+    ticks = iter([0, 1, 2.5, 3, 5, 6])
+    monkeypatch.setattr("apiguard.ai.time.monotonic", lambda: next(ticks))
     directory, metadata = generate(tmp_path, AIClient("claude-opus-5-5", {}, client=fake))
 
     # One call per tag; the cached system prompt includes the application context.
@@ -131,15 +145,44 @@ def test_generate_suite_validates_and_saves(tmp_path):
     saved_suite = json.loads((directory / "suite.json").read_text(encoding="utf-8"))
     assert saved_hash == expected_hash
     assert saved_suite["spec_sha256"] == expected_hash
+    assert saved_suite == metadata
+    assert saved_suite["generation_seconds"] == 6.0
+    assert saved_suite["ai_usage"] == {
+        "calls": 2,
+        "input_tokens": 2000,
+        "output_tokens": 1000,
+        "cache_write_tokens": 4000,
+        "cache_read_tokens": 0,
+        "seconds": 3.5,
+        "cost_usd": 0.048,
+    }
     assert (tmp_path / "shop" / "LATEST").read_text().strip() == metadata["suite_id"]
 
 
-def test_limit_stops_generation_but_keeps_tests(tmp_path):
-    fake = FakeAnthropic([reply(raw_test())])
-    ai = AIClient("claude-opus-5-5", {"max_calls": 1}, client=fake)
-    _, metadata = generate(tmp_path, ai)
-    assert metadata["counts"]["valid"] == 1
-    assert metadata["stopped_reason"] == "the limit of 1 model calls was reached"
+@pytest.mark.parametrize(
+    ("limits", "reason"),
+    [
+        ({"max_calls": 1}, "the limit of 1 model calls was reached"),
+        ({"max_output_tokens": 500}, "the limit of 500 output tokens was reached"),
+        ({"max_output_tokens": 499}, "the limit of 499 output tokens was reached"),
+        ({"max_cost_usd": 0.024}, "the estimated cost limit of $0.024 was reached"),
+        ({"max_cost_usd": 0.01}, "the estimated cost limit of $0.01 was reached"),
+    ],
+)
+def test_limit_stops_generation_but_keeps_tests(tmp_path, limits, reason):
+    fake = FakeAnthropic([reply(raw_test()), reply(raw_test(id="products-002"))])
+    ai = AIClient("claude-opus-5-5", limits, client=fake)
+    directory, metadata = generate(tmp_path, ai)
+    assert len(fake.requests) == 1
+    assert metadata["counts"] == {"generated": 1, "valid": 1, "excluded": 0}
+    assert metadata["stopped_reason"] == reason
+    saved_tests = json.loads((directory / "tests.json").read_text())
+    assert [test["id"] for test in saved_tests] == ["products-001"]
+    saved_suite = json.loads((directory / "suite.json").read_text())
+    assert saved_suite == metadata
+    assert saved_suite["ai_usage"]["calls"] == 1
+    assert saved_suite["ai_usage"]["output_tokens"] == 500
+    assert saved_suite["ai_usage"]["cost_usd"] == 0.024
 
 
 @pytest.mark.parametrize(
@@ -150,7 +193,9 @@ def test_limit_stops_generation_but_keeps_tests(tmp_path):
     ],
 )
 def test_token_and_cost_limits(limits, message):
-    ai = AIClient("claude-opus-5-5", limits, client=FakeAnthropic([reply(), reply()]))
+    fake = FakeAnthropic([reply(), reply()])
+    ai = AIClient("claude-opus-5-5", limits, client=fake)
     ai.generate_json("s", "p", TEST_SCHEMA)
-    with pytest.raises(AIError, match=message):
+    with pytest.raises(LimitReached, match=message):
         ai.generate_json("s", "p", TEST_SCHEMA)
+    assert len(fake.requests) == 1
