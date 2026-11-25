@@ -153,7 +153,7 @@ A connection error is expected when NexStock is not running. Validation errors i
 
 `apiguard.openapi.load_spec(location, timeout)` returns a validated document and its original bytes. `save_snapshot(spec, suite_directory)` writes those bytes to `openapi.yaml` and their SHA-256 digest to `openapi.sha256`. JSON input also uses the `.yaml` extension because JSON is valid YAML. The digest covers the exact saved bytes, including whitespace and comments.
 
-Use a separate directory for each suite version. The snapshot helper replaces the two snapshot files when called again for the same directory. It does not make the two writes atomic. The future generator must call it when saving each suite; `check` does not create a suite or snapshot.
+Use a separate directory for each suite version. The snapshot helper replaces the two snapshot files when called again for the same directory. It does not make the two writes atomic. When `apiguard generate` saves a suite, it writes the original specification to `openapi.yaml`, saves its SHA-256 fingerprint in `openapi.sha256`, and records the same fingerprint in `suite.json`. The `check` command only validates connectivity and the specification.
 
 Internal references (`#/components/...`) are supported. External references to other files or URLs are explicitly rejected in this first implementation, so validation cannot make additional uncontrolled requests and snapshots remain self-contained. Swagger 2.0, recursive YAML aliases, and non-JSON YAML values are unsupported. This limit can be revisited during reference-resolution work in issue #8.
 
@@ -230,3 +230,43 @@ To check formatting without changing files:
 ```
 
 The automated tests use temporary files and simulated HTTP responses. They do not require Docker, a running application, or an AI API key.
+
+## Run the Full Stack FastAPI Template
+
+Start Docker Desktop, then run these commands from the APIGuard repository root:
+
+```powershell
+git submodule update --init apps/template/upstream
+.\.venv\Scripts\python.exe apps/template/manage.py start
+.\.venv\Scripts\apiguard.exe check template
+.\.venv\Scripts\apiguard.exe run template --suite smoke
+```
+
+The template uses port 8011. The first start saves a copy of its initial database.
+APIGuard restores that copy before running the saved health test. Run
+`python apps/template/manage.py logs` to check recent health-request logs.
+
+## Run the Task Management API
+
+From the repository root in PowerShell with the APIGuard virtual environment active:
+
+```powershell
+git -c core.autocrlf=false submodule update --init apps/tasks/upstream
+$env:TASKS_MEMBER_EMAIL = 'member@example.com'
+$env:TASKS_MEMBER_PASSWORD = [guid]::NewGuid().ToString('N')
+python apps/tasks/manage.py start
+apiguard check tasks
+python apps/tasks/manage.py snapshot
+apiguard run tasks --suite smoke
+python apps/tasks/manage.py logs
+```
+
+The API listens on loopback port 8012. The snapshot command saves the live
+OpenAPI document and its hash for the smoke suite. Commit the three generated
+snapshot files with the integration. Once committed, later runs can skip this step.
+Each smoke run replaces the disposable database and Redis volumes belonging to
+the `apiguard-tasks` Compose project, migrates the database, and registers one
+test member using the two session variables above. Set them again in a new shell.
+The same profile read should return 200 with the member's token and 401 without it.
+The logs command parses those two request events from the current API container.
+Use `python apps/tasks/manage.py stop` to stop this app.

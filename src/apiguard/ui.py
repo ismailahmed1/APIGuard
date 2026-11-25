@@ -306,13 +306,20 @@ class Workspace:
 
 
 def _display(command, root):
-    """Show a command as a user would type it: `apiguard ...`, relative paths."""
+    """Show the command with project files written as relative paths."""
     if command[1:3] == ["-c", CLI]:
         command = ["apiguard", *command[3:]]
     elif command[0] == sys.executable:
         command = ["python", *command[1:]]
-    prefix = f"{Path(root).resolve()}{os.sep}"
-    return " ".join(str(part).replace(prefix, "") for part in command)
+
+    root_path = Path(root).resolve()
+    parts = []
+    for part in command:
+        path = Path(part)
+        if path.is_relative_to(root_path):
+            part = path.relative_to(root_path).as_posix()
+        parts.append(str(part))
+    return " ".join(parts)
 
 
 def make_handler(workspace, port):

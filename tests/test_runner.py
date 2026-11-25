@@ -176,12 +176,33 @@ def test_unreachable_application_does_not_stop_other_tests(server):
     assert results[1]["outcome"] == "passed"
 
 
-def test_run_time_limit_marks_remaining_tests(server):
+def test_run_time_limit_marks_remaining_tests(server, monkeypatch):
+    from types import SimpleNamespace
+
+    now = 100.0
+    clock = SimpleNamespace(monotonic=lambda: now)
+    monkeypatch.setattr("apiguard.runner.time", clock)
+
+    def slow_shop(request):
+        nonlocal now
+        if request.url.path == "/api/products":
+            now += 2
+        return shop(request)
+
+    server["handler"]["value"] = slow_shop
     settings = config()
-    settings["timeouts"]["run_seconds"] = 0.000001
-    _, summary, results = run([make_test("list", "GET", "/api/products")], settings)
-    assert results[0]["outcome"] == "not_run"
-    assert summary["outcomes"] == {"not_run": 1}
+    settings["timeouts"]["run_seconds"] = 1
+    tests = [
+        make_test("first", "GET", "/api/products"),
+        make_test("second", "GET", "/api/products"),
+    ]
+    _, summary, results = run(tests, settings)
+
+    assert [(r["id"], r["outcome"]) for r in results] == [
+        ("first", "passed"),
+        ("second", "not_run"),
+    ]
+    assert summary["outcomes"] == {"passed": 1, "not_run": 1}
 
 
 def test_failed_reset_stops_the_run(server, monkeypatch):

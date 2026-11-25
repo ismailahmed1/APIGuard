@@ -4,6 +4,7 @@ import json
 import os
 import re
 import subprocess
+import sys
 import time
 from datetime import UTC, datetime
 from pathlib import Path
@@ -226,6 +227,8 @@ class _Session:
         command = self.config["reset"].get("command")
         if not command:
             return
+        if command[0] == "python":
+            command = [sys.executable, *command[1:]]
         try:
             subprocess.run(
                 command,

@@ -268,3 +268,16 @@ def test_runs_can_be_named_by_label(tmp_path, monkeypatch):
     assert cli.resolve_run("shop", "F01") == "20260102-000000"
     assert cli.resolve_run("shop", "20260101-000000") == "20260101-000000"
     assert cli.resolve_run("shop", "unknown") == "unknown"
+
+
+def test_check_explains_unsupported_config_encoding(tmp_path, monkeypatch, capsys):
+    monkeypatch.chdir(tmp_path)
+    config_dir = tmp_path / "configs"
+    config_dir.mkdir()
+    (config_dir / "nexstock.yaml").write_text("name: nexstock\n", encoding="utf-16")
+
+    assert main(["check", "nexstock"]) == 2
+    message = capsys.readouterr().err
+    assert "Configuration error" in message
+    assert "UTF-8" in message
+    assert "nexstock.yaml" in message

@@ -48,4 +48,4 @@ Record important decisions here as they are made. Each entry should include the 
 
 | Date | Decision | Alternatives Considered | Reason |
 |---|---|---|---|
-| TBD | TBD | TBD | TBD |
+| 2026-11-24 | Use F06 for product deletion that reports success while leaving the product available. Preserve authentication and missing-product checks. | Stock-out accepting insufficient stock | Evaluate stateful workflow checks that verify persisted state after a successful response. |
