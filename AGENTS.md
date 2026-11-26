@@ -36,4 +36,12 @@ If a requirement or design decision is unclear, do not make a major assumption. 
 
 ## Commands
 
-Project setup, testing and formatting commands will be added here once the initial Python project is created.
+# Setup — WSL/Linux, using Python 3.11 or newer
+python3 -m venv .venv
+source .venv/bin/activate
+python -m pip install -e ".[dev]"
+
+# Development checks
+python -m ruff check .
+python -m ruff format --check .
+python -m pytest -q

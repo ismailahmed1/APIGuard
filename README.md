@@ -53,6 +53,26 @@ Verify installation:
 
 These commands use the virtual environment directly; activation is optional.
 
+## Local Setup — WSL/Linux
+
+Run the following commands from the repository root, which contains `pyproject.toml`:
+
+```bash
+# Requires Python 3.11 or newer
+python3 -m venv .venv
+source .venv/bin/activate
+python -m pip install -e ".[dev]"
+
+apiguard --version
+
+# Development checks
+python -m ruff check .
+python -m ruff format --check .
+python -m pytest -q
+```
+
+On Ubuntu, if environment creation reports missing `ensurepip`, install `python3-venv` with `sudo apt install python3-venv`, then retry creating the environment.
+
 ## Application Configuration
 
 The NexStock configuration is stored in `configs/nexstock.yaml`.
@@ -211,7 +231,7 @@ To check formatting without changing files:
 .\.venv\Scripts\python.exe -m ruff format --check .
 ```
 
-Configuration and CLI tests use temporary files and simulated HTTP responses. They do not require Docker, a running NexStock instance, or AI credentials.
+The automated tests use temporary files and simulated HTTP responses. They do not require Docker, a running application, or an AI API key.
 
 ## Run the Full Stack FastAPI Template
 
