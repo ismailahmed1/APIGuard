@@ -165,7 +165,9 @@ The OpenAPI document only states which operations need a token. It does not stat
 
 ## Generate and Run Tests
 
-`apiguard generate` sends the extracted operations and `apps/nexstock/context.md` to Claude and asks for structured test definitions (happy path, schema validation, authentication and boundary value). APIGuard validates every definition against the specification before it saves it, and records why it excluded the others. Set `ANTHROPIC_API_KEY` in the git-ignored `.env` file. The `generation.limits` section in the configuration caps calls, output tokens and estimated cost.
+`apiguard generate` sends the extracted operations and `apps/nexstock/context.md` to Claude and asks for structured test definitions (happy path, schema validation, authentication and boundary value). APIGuard validates every definition against the specification before it saves it, and records why it excluded the others. Set `ANTHROPIC_API_KEY` in the git-ignored `.env` file.
+
+The `generation.limits` settings stop further requests once recorded calls, output tokens or estimated cost reach a threshold. Checks happen between requests: an in-flight request can exceed the output-token or estimated-cost threshold, so the spending threshold is not a guaranteed hard cap. Valid tests already returned are saved with the stop reason. `suite.json` records calls, token usage, generation time and estimated cost. See [AI usage limits and records](docs/PROJECT_CONTEXT.md#ai-usage-limits-and-records-issue-10) for accounting limitations.
 
 ```bash
 apiguard generate nexstock --tag Authentication --tag Categories --tag Products --tag Inventory
