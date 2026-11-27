@@ -33,6 +33,21 @@ def test_valid_config_loads(tmp_path):
     assert config["timeouts"]["request_seconds"] == 10
 
 
+@pytest.mark.parametrize("commit", [None, "616e053ebda66294f5d3532dae4b3d752acc6cb0"])
+def test_optional_app_commit_loads(tmp_path, commit):
+    settings = valid_config()
+    settings["app_commit"] = commit
+    assert load_config(save_config(tmp_path, settings))["app_commit"] == commit
+
+
+@pytest.mark.parametrize("commit", ["", "main", "616e053", "g" * 40, 123, True])
+def test_invalid_app_commit_has_clear_error(tmp_path, commit):
+    settings = valid_config()
+    settings["app_commit"] = commit
+    with pytest.raises(ConfigError, match="app_commit"):
+        load_config(save_config(tmp_path, settings))
+
+
 def test_missing_file_has_clear_error(tmp_path):
     with pytest.raises(ConfigError, match="Cannot read"):
         load_config(tmp_path / "missing.yaml")

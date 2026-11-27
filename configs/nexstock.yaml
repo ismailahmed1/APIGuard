@@ -1,4 +1,6 @@
 name: nexstock
+# Pinned upstream revision in apps/nexstock/Dockerfile; update both together.
+app_commit: 616e053ebda66294f5d3532dae4b3d752acc6cb0
 base_url: http://127.0.0.1:8000
 spec_location: http://127.0.0.1:8000/openapi.json
 

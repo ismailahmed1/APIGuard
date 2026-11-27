@@ -110,6 +110,7 @@ def run_suite(config, metadata, tests, operations, runs_dir, label=None, reset=T
     run = {
         "run_id": run_id,
         "app": config["name"],
+        "app_commit": config.get("app_commit"),
         "label": label,
         "suite_id": metadata["suite_id"],
         "spec_sha256": metadata.get("spec_sha256"),

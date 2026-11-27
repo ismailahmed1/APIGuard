@@ -1,4 +1,6 @@
 name: tasks
+# Pinned upstream revision of the apps/tasks/upstream submodule.
+app_commit: 2afe5a0ac61ee0e1e709455904082d738d6bb837
 base_url: http://127.0.0.1:8012
 spec_location: http://127.0.0.1:8012/openapi.json
 timeouts:

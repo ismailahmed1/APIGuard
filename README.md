@@ -80,6 +80,7 @@ The NexStock configuration is stored in `configs/nexstock.yaml`.
 It defines:
 
 - `name`: application identifier.
+- `app_commit`: optional full upstream commit SHA for the tested application; keep it in sync with the Dockerfile or submodule pin. Omit it or set it to `null` when unavailable.
 - `base_url`: application address.
 - `spec_location`: OpenAPI specification URL or local file location.
 - `timeouts`: positive request and run time limits.
@@ -89,6 +90,11 @@ It defines:
 The current `check` command uses the request timeout. Authentication, database resets, and total-run timeout enforcement are not implemented by this command.
 
 Keep actual credentials out of tracked configuration files. `.env.example` lists the environment variables. The CLI reads a git-ignored `.env` file in the current directory; variables that are already set take priority.
+
+Each saved `run.json` records `app_commit` from the application configuration, plus
+`spec_sha256` and `suite_id` from the saved suite metadata. An unavailable commit is
+recorded as JSON `null`; APIGuard does not infer it from its own Git checkout. The
+spec hash identifies the suite's specification snapshot used during the run.
 
 ## Run NexStock in Docker
 
