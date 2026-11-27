@@ -122,13 +122,55 @@ def test_run_records_results_and_categories(server):
     assert by_id["delete"]["request"]["path_params"] == {"product_id": "3"}
     assert by_id["manager"]["category"] == "configuration_error"
     assert by_id["manager"]["detail"] == "environment variable SHOP_MANAGER_EMAIL is not set"
+    assert by_id["list"]["type"] == "happy_path"
+    assert by_id["list"]["operation"] == "GET /api/products"
+    assert by_id["list"]["expected"] == {"status": 200}
+    assert by_id["list"]["actual"] == {"status": 200, "body_excerpt": '{"data":[]}'}
+    assert all(isinstance(result["duration_ms"], int) for result in results)
 
     assert summary["outcomes"] == {"passed": 3, "failed": 1, "error": 1}
     assert summary["categories"] == {"api_failure": 1, "configuration_error": 1}
     assert summary["ai_model_used"] is False
     saved = json.loads((directory / "results.json").read_text())
     assert saved == results
+    assert json.loads((directory / "run.json").read_text()) == summary
     assert (directory.parent / "LATEST").read_text().strip() == summary["run_id"]
+
+
+def test_run_saves_app_commit_spec_hash_and_suite_id(server):
+    settings = config()
+    settings["app_commit"] = "616e053ebda66294f5d3532dae4b3d752acc6cb0"
+    metadata = {
+        "suite_id": "saved-suite-14",
+        "spec_sha256": "a" * 64,
+        # The tested app's current pin comes from configuration, not generation metadata.
+        "app_commit": "b" * 40,
+    }
+    directory, summary, _ = run_suite(
+        settings, metadata, [make_test("list", "GET", "/api/products")], OPERATIONS, "runs"
+    )
+
+    saved = json.loads((directory / "run.json").read_text())
+    assert saved == summary
+    assert saved["app_commit"] == settings["app_commit"]
+    assert saved["spec_sha256"] == metadata["spec_sha256"]
+    assert saved["suite_id"] == metadata["suite_id"]
+    assert server["resets"] == [["reset-shop"]]
+
+
+@pytest.mark.parametrize("explicit_null", [False, True])
+def test_run_saves_null_when_app_commit_is_unavailable(server, explicit_null):
+    settings = config()
+    if explicit_null:
+        settings["app_commit"] = None
+    directory, _, _ = run([make_test("list", "GET", "/api/products")], settings)
+
+    saved = json.loads((directory / "run.json").read_text())
+    assert "app_commit" in saved
+    assert saved["app_commit"] is None
+    assert saved["suite_id"] == "s1"
+    assert saved["spec_sha256"] is None  # Older suite metadata may lack a hash.
+    assert server["resets"] == [["reset-shop"]]  # No Git lookup or fallback.
 
 
 def test_credentials_use_placeholders_and_are_redacted(server):

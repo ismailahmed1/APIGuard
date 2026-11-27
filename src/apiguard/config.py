@@ -1,4 +1,5 @@
 import math
+import re
 from pathlib import Path
 from urllib.parse import urlsplit
 
@@ -33,6 +34,12 @@ def load_config(path):
             raise ConfigError(f"'{key}' must be a nonempty string.")
 
     validate_http_url(config["base_url"], "base_url")
+
+    app_commit = config.get("app_commit")
+    if app_commit is not None and (
+        not isinstance(app_commit, str) or not re.fullmatch(r"[0-9a-fA-F]{40}", app_commit)
+    ):
+        raise ConfigError("'app_commit' must be a full 40-character commit SHA or null.")
 
     # A specification may be a URL or a local file.
     spec_location = config["spec_location"]

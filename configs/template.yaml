@@ -1,4 +1,6 @@
 name: template
+# Pinned upstream revision of the apps/template/upstream submodule.
+app_commit: 77e550a73bb49dd2967622c5ed11bf7a49603c93
 base_url: http://127.0.0.1:8011
 spec_location: http://127.0.0.1:8011/api/v1/openapi.json
 
