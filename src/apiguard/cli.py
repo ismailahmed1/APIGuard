@@ -17,7 +17,16 @@ from apiguard.generator import generate_suite
 from apiguard.monitor import MonitorError, monitor_run
 from apiguard.openapi import SpecError, get_response, load_spec
 from apiguard.operations import extract_operations
-from apiguard.reporting import compare_runs, format_alerts, format_run, format_suite, table
+from apiguard.reporting import (
+    build_report,
+    compare_runs,
+    format_alerts,
+    format_run,
+    format_suite,
+    report_json,
+    report_markdown,
+    table,
+)
 from apiguard.runner import RunError, get_token, load_suite, reset_app, run_suite
 
 MEDIA_LABELS = {
@@ -63,6 +72,11 @@ def main(argv=None):
     )
     report = command("report", "Show the report of a saved run.")
     report.add_argument("--run", help="Run ID (default: the latest run).")
+    report.add_argument(
+        "--export",
+        action="store_true",
+        help="Also save the report as report.md and report.json in the run directory.",
+    )
     compare = command("compare", "Find tests that pass in a base run and fail in another run.")
     compare.add_argument("base", help="Base run ID or label, usually the original app.")
     compare.add_argument("other", help="Run ID or label to compare, usually a seeded fault.")
@@ -215,7 +229,22 @@ def classification_ai(config):
 def cmd_report(args):
     config = load_app(args.app)
     run, results = read_run(config["name"], args.run)
+    directory = Path(RUNS_DIR) / config["name"] / run["run_id"]
+    try:
+        alerts = json.loads((directory / "alerts.json").read_text(encoding="utf-8"))
+    except (OSError, json.JSONDecodeError):
+        alerts = None  # The security monitor did not run for this run.
     print(format_run(run, results))
+    print("\nSecurity alerts:")
+    if alerts is None:
+        print("  The security monitor did not run.")
+    else:
+        print("\n".join("  " + line for line in format_alerts(alerts)) or "  No alerts.")
+    if args.export:
+        report = build_report(run, results, alerts)
+        (directory / "report.md").write_text(report_markdown(report), encoding="utf-8")
+        (directory / "report.json").write_text(report_json(report), encoding="utf-8")
+        print(f"\nSaved {directory / 'report.md'} and {directory / 'report.json'}")
     return 0
 
 
