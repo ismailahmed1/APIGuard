@@ -1,5 +1,7 @@
 """Run a saved suite against the application without the AI model (FR-06)."""
 
+import base64
+import binascii
 import json
 import os
 import re
@@ -21,6 +23,10 @@ from apiguard.validator import ANONYMOUS, MUTATING_METHODS
 PLACEHOLDER = re.compile(r"\{\{(\w+)\.(email|password)\}\}")
 JWT = re.compile(r"eyJ[\w-]+\.[\w-]+\.[\w-]+")
 EXCERPT_CHARS = 300
+# Log in again when a token expires within this time.
+REFRESH_MARGIN_SECONDS = 30
+# Keys that APIGuard reads from the environment, which must never appear in its output.
+SECRET_VARIABLES = ("ANTHROPIC_API_KEY", "ANTHROPIC_AUTH_TOKEN")
 
 
 class RunError(Exception):
@@ -230,7 +236,13 @@ class _Session:
         self.client = None
         self.requests = 0
         self.tokens = {}
+        self.expiry = {}
         self.secrets = set()
+        # Register known secrets now, so that output is clean even if a test leaks one.
+        variables = list(SECRET_VARIABLES)
+        for settings in self.auth.get("roles", {}).values():
+            variables.append(settings.get("password_env"))
+        self.secrets.update(v for v in (os.environ.get(n or "") for n in variables) if v)
 
     def reset(self):
         command = self.config["reset"].get("command")
@@ -270,6 +282,9 @@ class _Session:
         return value
 
     def token(self, role):
+        expiry = self.expiry.get(role)
+        if expiry is not None and time.time() >= expiry - REFRESH_MARGIN_SECONDS:
+            del self.tokens[role]  # The token has expired, or soon will; log in again.
         if role not in self.tokens:
             field = self.auth.get("username_field", "email")
             body = {
@@ -286,6 +301,7 @@ class _Session:
                     f"login as '{role}' failed with HTTP {response.status_code}",
                 )
             self.tokens[role] = token
+            self.expiry[role] = _expiry(token)
             self.secrets.add(token)
         return self.tokens[role]
 
@@ -309,3 +325,16 @@ class _Session:
         if isinstance(value, dict):
             return {key: self.redact(item) for key, item in value.items()}
         return value
+
+
+def _expiry(token):
+    """Return the 'exp' time of a JWT, or None when the token has no readable expiry."""
+    try:
+        payload = token.split(".")[1]
+        claims = json.loads(base64.urlsafe_b64decode(payload + "=" * (-len(payload) % 4)))
+    except (IndexError, ValueError, binascii.Error):
+        return None
+    expiry = claims.get("exp") if isinstance(claims, dict) else None
+    if isinstance(expiry, bool) or not isinstance(expiry, (int, float)):
+        return None
+    return expiry
