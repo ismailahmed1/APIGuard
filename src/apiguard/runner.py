@@ -75,7 +75,7 @@ def get_token(config, role):
             raise RunError(str(exc)) from exc
 
 
-def run_suite(config, metadata, tests, operations, runs_dir, label=None, reset=True):
+def run_suite(config, metadata, tests, operations, runs_dir, label=None, reset=True, ai=None):
     """Run the tests and save the results. Returns (run directory, summary, results)."""
     timeouts = config["timeouts"]
     by_key = {(op.method, op.path): op for op in operations}
@@ -111,7 +111,10 @@ def run_suite(config, metadata, tests, operations, runs_dir, label=None, reset=T
             results.append(classifier.apply(_run_test(test, by_key, session)))
             dirty = dirty or test["method"] in MUTATING_METHODS
 
-    summary = _summary(results)
+    # Secrets are removed before any result is sent to the AI model (FR-10, NFR-04).
+    redacted = [session.redact(result) for result in results]
+    ai_note = classifier.classify_with_ai(redacted, ai) if ai else None
+    summary = _summary(redacted)
     run_id = started.strftime("%Y%m%d-%H%M%S")
     directory = Path(runs_dir) / config["name"] / run_id
     directory.mkdir(parents=True, exist_ok=True)
@@ -126,10 +129,11 @@ def run_suite(config, metadata, tests, operations, runs_dir, label=None, reset=T
         "seconds": round(time.monotonic() - start, 2),
         "requests": session.requests,
         "resets": resets,
-        "ai_model_used": False,
+        "ai_model_used": bool(ai and ai.usage.calls),
+        "ai_usage": ai.usage.as_dict(ai.model) if ai else None,
+        "ai_note": ai_note,
         **summary,
     }
-    redacted = [session.redact(result) for result in results]
     (directory / "results.json").write_text(json.dumps(redacted, indent=2) + "\n", "utf-8")
     (directory / "run.json").write_text(json.dumps(run, indent=2) + "\n", "utf-8")
     (Path(runs_dir) / config["name"] / "LATEST").write_text(run_id + "\n", "utf-8")
