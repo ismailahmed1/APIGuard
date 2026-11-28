@@ -6,7 +6,7 @@ import subprocess
 import sys
 from pathlib import Path
 
-from apiguard.validator import MUTATING_METHODS
+from apiguard.validator import changes_data
 
 CONFTEST = '''"""Shared fixture for the generated tests. Made by APIGuard; do not edit."""
 
@@ -34,7 +34,7 @@ def build_pytest(suite_dir, tests):
     (directory / "conftest.py").write_text(CONFTEST, encoding="utf-8")
 
     # Reads first, as in `apiguard run`; each file keeps the order of its tests.
-    ordered = sorted(tests, key=lambda test: test["method"] in MUTATING_METHODS)
+    ordered = sorted(tests, key=changes_data)
     groups = {}
     for test in ordered:
         groups.setdefault(_group(test["id"]), []).append(test)
@@ -82,6 +82,8 @@ def _function(test, names):
         "path_params": test["path_params"],
         "query_params": test["query_params"],
         "body": test["body"],
+        "checks": test.get("checks", []),
+        "steps": test.get("steps", []),
         "test_id": test["id"],
         "test_type": test["type"],
     }

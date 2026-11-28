@@ -27,6 +27,8 @@ def test_valid_test_is_converted_to_runner_format():
             "query_params": {},
             "body": {"name": "Lamp", "price": 9.5},
             "expected_status": 201,
+            "checks": [],
+            "steps": [],
         }
     ]
 
@@ -169,3 +171,82 @@ def test_credential_placeholders_count_as_valid_values():
     valid, excluded = validate(login)
     assert excluded == []
     assert valid[0]["body"]["email"] == "{{admin.email}}"
+
+
+def step(**changes):
+    request = {
+        "method": "DELETE",
+        "path": "/api/products/{product_id}",
+        "role": "admin",
+        "path_params": [{"name": "product_id", "value": "{{r0.id}}"}],
+        "query_params": [],
+        "body_json": "",
+        "expected_status": 200,
+        "checks": [],
+    }
+    request.update(changes)
+    return request
+
+
+def test_workflow_steps_use_earlier_responses():
+    workflow = raw_test(
+        id="products-flow",
+        type="stateful_workflow",
+        checks=[{"path": "id", "equals_json": "7"}],
+        steps=[step()],
+    )
+    (test,), excluded = validate(workflow)
+    assert excluded == []
+    assert test["checks"] == [{"path": "id", "equals": 7}]
+    assert test["steps"][0]["path_params"] == {"product_id": "{{r0.id}}"}
+
+
+@pytest.mark.parametrize(
+    ("changes", "reason"),
+    [
+        ({"type": "stateful_workflow", "steps": []}, "needs one or more steps"),
+        ({"steps": [step()]}, "only stateful workflow tests can have steps"),
+        (
+            {
+                "type": "stateful_workflow",
+                "steps": [step(path_params=[{"name": "product_id", "value": "{{r1.id}}"}])],
+            },
+            "step 1: {{r1.id}} names a response that does not exist yet",
+        ),
+        (
+            {"body_json": '{"name": "{{r0.name}}", "price": 1}'},
+            "{{r0.name}} names a response that does not exist yet",
+        ),
+        ({"checks": [{"path": "data..id", "equals_json": "1"}]}, "is not valid"),
+        ({"checks": [{"path": "id", "equals_json": "not json"}]}, "needs a JSON value"),
+        (
+            {
+                "type": "schema_validation",
+                "body_json": '{"name": ""}',
+                "expected_status": 422,
+                "checks": [{"path": "id", "equals_json": "1"}],
+            },
+            "checks need a success status",
+        ),
+        ({"type": "authorization", "role": "anonymous", "expected_status": 403}, "must use a role"),
+        ({"type": "authorization", "role": "manager", "expected_status": 401}, "must expect 403"),
+        ({"type": "fuzz", "expected_status": 201}, "must expect a 4xx rejection"),
+    ],
+)
+def test_new_test_type_rules(changes, reason):
+    _, excluded = validate(raw_test(**changes))
+    assert reason in excluded[0]["reason"]
+
+
+def test_authorization_and_fuzz_tests_are_kept():
+    authorization = raw_test(id="a", type="authorization", role="manager", expected_status=403)
+    fuzz = raw_test(id="f", type="fuzz", body_json='{"name": 5, "price": "x"}', expected_status=422)
+    valid, excluded = validate(authorization, fuzz)
+    assert excluded == []
+    assert [t["type"] for t in valid] == ["authorization", "fuzz"]
+
+
+def test_repeat_markers_are_expanded_in_checks():
+    check = {"path": "name", "equals_json": '"{{repeat:a:5}}"'}
+    (test,), _ = validate(raw_test(checks=[check]))
+    assert test["checks"] == [{"path": "name", "equals": "aaaaa"}]

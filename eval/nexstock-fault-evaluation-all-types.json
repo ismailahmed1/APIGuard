@@ -1,0 +1,102 @@
+{
+  "suite_id": "20261128-020639",
+  "tests": 171,
+  "original_failing_operations": {
+    "apiguard": 6,
+    "schemathesis": 16
+  },
+  "faults": [
+    {
+      "id": "F01-products-list-without-auth",
+      "category": "Unauthorized access",
+      "operation": "GET /api/products",
+      "apiguard": {
+        "detected": true,
+        "other_new_failures": [],
+        "text": "DETECTED"
+      },
+      "schemathesis": {
+        "detected": false,
+        "other_new_failures": [],
+        "text": "missed"
+      }
+    },
+    {
+      "id": "F02-category-create-wrong-status",
+      "category": "Wrong status code",
+      "operation": "POST /api/categories",
+      "apiguard": {
+        "detected": true,
+        "other_new_failures": [],
+        "text": "DETECTED"
+      },
+      "schemathesis": {
+        "detected": true,
+        "other_new_failures": [
+          "Stateful tests"
+        ],
+        "text": "DETECTED (+1 other)"
+      }
+    },
+    {
+      "id": "F03-product-negative-price-accepted",
+      "category": "Input validation removed",
+      "operation": "POST /api/products",
+      "apiguard": {
+        "detected": true,
+        "other_new_failures": [],
+        "text": "DETECTED"
+      },
+      "schemathesis": {
+        "detected": false,
+        "other_new_failures": [],
+        "text": "missed"
+      }
+    },
+    {
+      "id": "F04-category-delete-manager-allowed",
+      "category": "Broken authorization",
+      "operation": "DELETE /api/categories/{category_id}",
+      "apiguard": {
+        "detected": true,
+        "other_new_failures": [],
+        "text": "DETECTED"
+      },
+      "schemathesis": {
+        "detected": false,
+        "other_new_failures": [],
+        "text": "missed"
+      }
+    },
+    {
+      "id": "F05-products-ignore-category-filter",
+      "category": "Business-logic and semantic testing",
+      "operation": "GET /api/products",
+      "apiguard": {
+        "detected": true,
+        "other_new_failures": [],
+        "text": "DETECTED"
+      },
+      "schemathesis": {
+        "detected": false,
+        "other_new_failures": [],
+        "text": "missed"
+      }
+    },
+    {
+      "id": "F06-product-delete-no-effect",
+      "category": "Stateful workflow testing",
+      "operation": "DELETE /api/products/{product_id}",
+      "apiguard": {
+        "detected": true,
+        "other_new_failures": [],
+        "text": "DETECTED"
+      },
+      "schemathesis": {
+        "detected": false,
+        "other_new_failures": [],
+        "text": "missed"
+      }
+    }
+  ]
+}

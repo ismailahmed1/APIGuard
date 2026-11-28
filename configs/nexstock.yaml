@@ -49,6 +49,10 @@ generation:
   model: claude-opus-5-5
   effort: medium
   context_file: apps/nexstock/context.md
+  # Operations that only some roles may call; each needs an authorization test.
+  permissions:
+    DELETE /api/categories/{category_id}: [admin]
+    DELETE /api/products/{product_id}: [admin]
   limits:
     max_calls: 10
     max_output_tokens: 150000

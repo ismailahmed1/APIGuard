@@ -113,22 +113,33 @@ def test_generate_suite_validates_and_saves(tmp_path, monkeypatch):
         body_json='{"email": "{{admin.email}}", "password": "{{admin.password}}"}',
         expected_status=200,
     )
-    # Tags are generated in specification order: Auth, then Products.
+    # Tags are generated in specification order: Auth, then Products. After each group, one
+    # more request asks for the applicable test types that are still missing.
     fake = FakeAnthropic(
-        [reply(login), reply(raw_test(), raw_test(id="products-002", path="/api/nowhere"))]
+        [
+            reply(login),
+            reply(),
+            reply(raw_test(), raw_test(id="products-002", path="/api/nowhere")),
+            reply(),
+        ]
     )
     # Shared monotonic clock: loop start, each request's start/end, loop end.
-    ticks = iter([0, 1, 2.5, 3, 5, 6])
+    ticks = iter([0, 1, 2.5, 3, 3.5, 4, 5, 5.5, 6, 7])
     monkeypatch.setattr("apiguard.ai.time.monotonic", lambda: next(ticks))
     directory, metadata = generate(tmp_path, AIClient("claude-opus-5-5", {}, client=fake))
 
-    # One call per tag; the cached system prompt includes the application context.
-    assert len(fake.requests) == 2
+    # Two calls per tag; the cached system prompt includes the application context.
+    assert len(fake.requests) == 4
     assert "Seed data." in fake.requests[0]["system"][0]["text"]
     assert "'auth-'" in fake.requests[0]["messages"][0]["content"]
-    assert "'products-'" in fake.requests[1]["messages"][0]["content"]
+    gap = fake.requests[1]["messages"][0]["content"]
+    assert "'auth-gap-'" in gap
+    assert "- POST /api/auth/login: fuzz" in gap
+    assert "'products-'" in fake.requests[2]["messages"][0]["content"]
+    assert "no operation POST /api/nowhere" in fake.requests[3]["messages"][0]["content"]
     assert metadata["counts"] == {"generated": 3, "valid": 2, "excluded": 1}
-    assert metadata["ai_usage"]["calls"] == 2
+    assert metadata["ai_usage"]["calls"] == 4
+    assert "POST /api/auth/login: fuzz" in metadata["coverage_missing"]
     assert metadata["operations"] == ["POST /api/auth/login", "GET /api/products"] + [
         "POST /api/products",
         "DELETE /api/products/{product_id}",
@@ -146,15 +157,15 @@ def test_generate_suite_validates_and_saves(tmp_path, monkeypatch):
     assert saved_hash == expected_hash
     assert saved_suite["spec_sha256"] == expected_hash
     assert saved_suite == metadata
-    assert saved_suite["generation_seconds"] == 6.0
+    assert saved_suite["generation_seconds"] == 7.0
     assert saved_suite["ai_usage"] == {
-        "calls": 2,
-        "input_tokens": 2000,
-        "output_tokens": 1000,
-        "cache_write_tokens": 4000,
+        "calls": 4,
+        "input_tokens": 4000,
+        "output_tokens": 2000,
+        "cache_write_tokens": 8000,
         "cache_read_tokens": 0,
         "seconds": 3.5,
-        "cost_usd": 0.048,
+        "cost_usd": 0.096,
     }
     assert (tmp_path / "shop" / "LATEST").read_text().strip() == metadata["suite_id"]
 

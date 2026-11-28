@@ -14,8 +14,9 @@ from apiguard.ai import AIClient, AIError
 from apiguard.baseline import BaselineError, compare_baselines, run_baseline
 from apiguard.builder import build_pytest, collect
 from apiguard.config import ConfigError, load_config
+from apiguard.coverage import coverage, format_coverage, missing_cells
 from apiguard.docker_run import run_in_docker
-from apiguard.generator import generate_suite
+from apiguard.generator import generate_suite, select_operations
 from apiguard.generator_pytest import generate_pytest_suite
 from apiguard.metrics import record_metrics, run_metrics
 from apiguard.monitor import MonitorError, monitor_run
@@ -94,6 +95,8 @@ def main(argv=None):
         action="store_true",
         help="Run the suite's Pytest files in a container on the app's Docker network.",
     )
+    cover = command("coverage", "Show the operations and test types that a saved suite covers.")
+    cover.add_argument("--suite", help="Suite ID (default: the latest suite).")
     build = command("build", "Convert a saved suite to Pytest files.")
     build.add_argument("--suite", help="Suite ID (default: the latest suite).")
     report = command("report", "Show the report of a saved run.")
@@ -200,7 +203,15 @@ def cmd_generate(args):
         return generate_pytest(config, spec, operations, args.tag, ai, context, roles)
     try:
         directory, metadata = generate_suite(
-            config["name"], spec, operations, args.tag, ai, context, roles, SUITES_DIR
+            config["name"],
+            spec,
+            operations,
+            args.tag,
+            ai,
+            context,
+            roles,
+            SUITES_DIR,
+            permissions=settings.get("permissions", {}),
         )
     except AIError as exc:
         raise Failure(f"AI error: {exc}.", 1) from exc
@@ -337,6 +348,22 @@ def run_docker(config, args):
         print("The run time limit stopped the container.")
     print(f"Saved to {directory}")
     return 0 if summary["total"] and outcomes.get("passed", 0) == summary["total"] else 1
+
+
+def cmd_coverage(args):
+    config = load_app(args.app)
+    try:
+        suite_dir, metadata, tests = load_suite(SUITES_DIR, config["name"], args.suite)
+        snapshot = load_spec(str(suite_dir / "openapi.yaml"), config["timeouts"]["request_seconds"])
+    except (RunError, SpecError) as exc:
+        raise Failure(f"Error: {exc}", 2) from exc
+    selected = select_operations(extract_operations(snapshot.document), metadata.get("tags", []))
+    permissions = config.get("generation", {}).get("permissions", {})
+    roles = list(config["auth"].get("roles", {}))
+    result = coverage(tests, selected, permissions, roles)
+    print(f"Suite {metadata['suite_id']}: {len(tests)} tests for {len(selected)} operations\n")
+    print(format_coverage(result))
+    return 1 if missing_cells(result) else 0
 
 
 def cmd_build(args):
@@ -518,6 +545,7 @@ COMMANDS = {
     "generate": cmd_generate,
     "run": cmd_run,
     "validate": cmd_validate,
+    "coverage": cmd_coverage,
     "build": cmd_build,
     "report": cmd_report,
     "compare": cmd_compare,
