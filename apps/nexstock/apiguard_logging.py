@@ -6,7 +6,8 @@ The container starts NexStock through this module:
 
 Each line has "source": "apiguard", so the monitor can skip other output. The lines contain no
 passwords and no tokens (NFR-04): the user and role come from the verified token, and a login line
-gives only the email address.
+gives only the email address or user name. Other apps can use RequestLog with their own login path,
+login field and token decoder.
 """
 
 import json
@@ -19,10 +20,11 @@ LOGIN_PATH = "/api/auth/login"
 class RequestLog:
     """ASGI middleware. `decode` returns the claims of a valid token, or raises an exception."""
 
-    def __init__(self, app, decode, login_path=LOGIN_PATH, stream=None):
+    def __init__(self, app, decode, login_path=LOGIN_PATH, stream=None, user_field="email"):
         self.app = app
         self.decode = decode
         self.login_path = login_path
+        self.user_field = user_field
         self.stream = stream or sys.stdout
 
     async def __call__(self, scope, receive, send):
@@ -67,7 +69,7 @@ class RequestLog:
                     {
                         **event,
                         "event": "login_success" if success else "login_failure",
-                        "user": _email(bytes(body)),
+                        "user": _login_name(bytes(body), self.user_field),
                     }
                 )
 
@@ -88,9 +90,9 @@ class RequestLog:
         self.stream.flush()
 
 
-def _email(body):
+def _login_name(body, field):
     try:
-        value = json.loads(body).get("email")
+        value = json.loads(body).get(field)
     except (ValueError, AttributeError):
         return None
     return value if isinstance(value, str) else None

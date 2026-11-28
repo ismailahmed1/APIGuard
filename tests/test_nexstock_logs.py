@@ -84,3 +84,22 @@ def test_login_success_and_failure_are_logged_without_secrets():
 def test_unhandled_error_is_logged_as_500():
     _, events = requests(("GET", "/crash", {}))
     assert events[0]["status"] == 500
+
+
+def test_login_field_can_be_a_user_name():
+    async def app(scope, receive, send):
+        await receive()
+        await send({"type": "http.response.start", "status": 401, "headers": []})
+        await send({"type": "http.response.body", "body": b"{}"})
+
+    stream = io.StringIO()
+    logged = RequestLog(app, decode, login_path="/api/login", stream=stream, user_field="username")
+
+    async def login():
+        transport = httpx.ASGITransport(app=logged)
+        async with httpx.AsyncClient(transport=transport, base_url="http://bank") as client:
+            await client.post("/api/login", json={"username": "apiguard-user", "password": "x1"})
+
+    asyncio.run(login())
+    events = [json.loads(line) for line in stream.getvalue().splitlines()]
+    assert (events[1]["event"], events[1]["user"]) == ("login_failure", "apiguard-user")
