@@ -12,6 +12,7 @@ from dotenv import load_dotenv
 from apiguard import __version__
 from apiguard.ai import AIClient, AIError
 from apiguard.baseline import BaselineError, compare_baselines, run_baseline
+from apiguard.builder import build_pytest, collect
 from apiguard.config import ConfigError, load_config
 from apiguard.generator import generate_suite
 from apiguard.metrics import record_metrics, run_metrics
@@ -79,6 +80,9 @@ def main(argv=None):
     )
     validate.add_argument("--suite", help="Suite ID (default: the latest suite).")
     validate.add_argument("--runs", type=int, default=3, help="Number of runs (default: 3).")
+
+    build = command("build", "Convert a saved suite to Pytest files.")
+    build.add_argument("--suite", help="Suite ID (default: the latest suite).")
     report = command("report", "Show the report of a saved run.")
     report.add_argument("--run", help="Run ID (default: the latest run).")
     report.add_argument(
@@ -274,6 +278,24 @@ def cmd_validate(args):
     return 1 if report["flaky"] else 0
 
 
+def cmd_build(args):
+    config = load_app(args.app)
+    try:
+        suite_dir, metadata, tests = load_suite(SUITES_DIR, config["name"], args.suite)
+    except RunError as exc:
+        raise Failure(f"Error: {exc}", 2) from exc
+    paths = build_pytest(suite_dir, tests)
+    result = {"files_written": len(paths), "tests_written": len(tests), **collect(paths[0].parent)}
+    metadata["pytest_build"] = result
+    (suite_dir / "suite.json").write_text(json.dumps(metadata, indent=2) + "\n", "utf-8")
+    print(
+        f"Wrote {len(tests)} tests in {len(paths)} files to {suite_dir / 'pytest'}. "
+        f"Pytest collects {result['tests_collected']} tests in {result['files_collected']} files."
+    )
+    print(f"Run them with: python -m pytest {suite_dir / 'pytest'}")
+    return 0 if result["collect_exit_code"] == 0 else 1
+
+
 def cmd_report(args):
     config = load_app(args.app)
     run, results = read_run(config["name"], args.run)
@@ -435,6 +457,7 @@ COMMANDS = {
     "generate": cmd_generate,
     "run": cmd_run,
     "validate": cmd_validate,
+    "build": cmd_build,
     "report": cmd_report,
     "compare": cmd_compare,
     "baseline": cmd_baseline,
