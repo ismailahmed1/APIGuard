@@ -15,6 +15,7 @@ from jsonschema import Draft202012Validator
 from jsonschema.exceptions import SchemaError
 from referencing.exceptions import Unresolvable
 
+from apiguard import classifier
 from apiguard.validator import ANONYMOUS, MUTATING_METHODS
 
 PLACEHOLDER = re.compile(r"\{\{(\w+)\.(email|password)\}\}")
@@ -95,12 +96,13 @@ def run_suite(config, metadata, tests, operations, runs_dir, label=None, reset=T
         session.client = client
         for test in ordered:
             if time.monotonic() > deadline:
-                results.append(_result(test, "not_run", "infrastructure_error", "run time limit"))
+                result = _result(test, "not_run", "infrastructure_error", "run time limit")
+                results.append(classifier.apply(result))
                 continue
             if reset and dirty and test["method"] in MUTATING_METHODS:
                 session.reset()
                 resets += 1
-            results.append(_run_test(test, by_key, session))
+            results.append(classifier.apply(_run_test(test, by_key, session)))
             dirty = dirty or test["method"] in MUTATING_METHODS
 
     summary = _summary(results)
@@ -140,7 +142,9 @@ def _run_test(test, by_key, session):
     }
     try:
         if operation is None:
-            raise _TestProblem("test_error", "operation is no longer in the specification")
+            raise _TestProblem(
+                "generated_test_error", "operation is no longer in the specification"
+            )
         headers = {}
         if test["role"] != ANONYMOUS:
             headers["Authorization"] = f"Bearer {session.token(test['role'])}"
@@ -158,13 +162,13 @@ def _run_test(test, by_key, session):
     if response.status_code == expected:
         problem = _schema_problem(operation, response)
         if problem:
-            return _result(test, "failed", "api_failure", problem, request, started, actual)
+            return _result(test, "failed", None, problem, request, started, actual)
         return _result(test, "passed", None, None, request, started, actual)
     if response.status_code >= 500:
         detail = f"server error {response.status_code} (expected {expected})"
     else:
         detail = f"unexpected status {response.status_code} (expected {expected})"
-    return _result(test, "failed", "api_failure", detail, request, started, actual)
+    return _result(test, "failed", None, detail, request, started, actual)
 
 
 def _schema_problem(operation, response):
