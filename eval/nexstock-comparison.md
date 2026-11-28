@@ -54,3 +54,20 @@ Proposal for the team to approve: use six faults for each app, one for each faul
 
 - #19: compare Method A and Method B, then run this comparison again with the selected method.
 - #20: add the missing test types, then run this comparison again.
+
+## Second run with all test types (Issue #20)
+
+Suite `20261128-020639` (Method B) has all seven test types, response value checks and multi-step workflows. Its NexStock coverage table has no empty applicable cells. Raw result: [nexstock-fault-evaluation-all-types.json](nexstock-fault-evaluation-all-types.json).
+
+| Fault | Type | APIGuard | Schemathesis |
+|---|---|---|---|
+| F01 | Unauthorized access | Detected | Missed |
+| F02 | Wrong status code | Detected | Detected |
+| F03 | Input validation removed | Detected | Missed |
+| F04 | Broken authorization | Detected | Missed |
+| F05 | Business logic | Detected | Missed |
+| F06 | Stateful workflow | Detected | Missed |
+
+- Fault-detection rate: APIGuard 6/6, Schemathesis 1/6. APIGuard had no false positives.
+- 171 tests; 152 pass on the original app. The 19 failures are known NexStock v1 defects (HTTP 500).
+- Generation: 7 model calls (4 groups and 3 requests for missing cells), 12,003 input and 29,677 output tokens, about $0.66, 220 s.

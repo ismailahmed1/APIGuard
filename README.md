@@ -27,6 +27,7 @@ APIGuard currently supports:
 - Showing one report with the totals, the failures by category and the security alerts. `apiguard report <app> --run <run-id> --export` also saves it as `report.md` and `report.json` in the run directory.
 - Recording the evaluation metrics of each run in `eval/metrics/<app>.jsonl`: generation time, run time, requests, AI calls, tokens, cost, endpoint coverage and executable-test rate.
 - Running a saved suite more than one time with `apiguard validate <app> --runs N`. It flags tests with different results and saves the saved, rejected and flaky tests in `validation.json` in the suite directory.
+- Showing which operations and test types a suite covers with `apiguard coverage <app>`.
 - Converting a saved suite to Pytest files with `apiguard build`. See [docs/test-definitions.md](docs/test-definitions.md) for the test-definition schema.
 - Comparing two runs with `apiguard compare`, and running a Schemathesis baseline with `apiguard baseline`.
 - Evaluating fault detection against seeded NexStock faults with `scripts/evaluate_faults.py`.

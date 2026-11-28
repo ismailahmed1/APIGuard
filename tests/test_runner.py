@@ -419,3 +419,57 @@ def test_fr05_valid_malformed_and_flaky_tests(server):
     assert report["rejected"][0]["id"] == "malformed"
     assert "not valid JSON" in report["rejected"][0]["reason"]
     assert [item["id"] for item in report["flaky"]] == ["flaky"]
+
+
+def test_response_checks_and_workflow_steps(server):
+    deleted = set()
+
+    def store(request):
+        if request.url.path == "/api/auth/login":
+            return shop(request)
+        if request.method == "POST":
+            return httpx.Response(201, json={"id": 7, "name": "Lamp"})
+        if request.method == "DELETE":
+            deleted.add(request.url.path)
+            return httpx.Response(200, json={"deleted": True})
+        return httpx.Response(200, json={"data": [{"category_id": 2}, {"category_id": 3}]})
+
+    server["handler"]["value"] = store
+    workflow = make_test("flow", "POST", "/api/products", expected=201, body={"name": "Lamp"})
+    workflow.update(
+        type="stateful_workflow",
+        checks=[{"path": "name", "equals": "Lamp"}],
+        steps=[
+            {
+                **make_test("s", "DELETE", "/api/products/{product_id}"),
+                "path_params": {"product_id": "{{r0.id}}"},
+                "checks": [{"path": "deleted", "equals": True}],
+            }
+        ],
+    )
+    filtered = make_test("filter", "GET", "/api/products")
+    filtered["checks"] = [{"path": "data[*].category_id", "equals": 2}]
+    _, _, results = run([workflow, filtered])
+    by_id = {r["id"]: r for r in results}
+    assert by_id["flow"]["outcome"] == "passed"
+    assert deleted == {"/api/products/7"}
+    assert by_id["filter"]["outcome"] == "failed"
+    assert by_id["filter"]["detail"] == "response value at data[*].category_id is 3 (expected 2)"
+    assert by_id["filter"]["category"] == "business_logic"
+
+
+def test_failed_workflow_step_names_the_step(server):
+    server["handler"]["value"] = lambda r: (
+        shop(r)
+        if r.url.path == "/api/auth/login"
+        else httpx.Response(201 if r.method == "POST" else 200, json={"id": 7})
+    )
+    workflow = make_test("flow", "POST", "/api/products", expected=201, body={"name": "Lamp"})
+    workflow.update(
+        type="stateful_workflow",
+        steps=[{**make_test("s", "GET", "/api/products"), "expected_status": 404, "checks": []}],
+    )
+    (result,) = run([workflow])[2]
+    assert result["detail"] == "step 1: unexpected status 200 (expected 404)"
+    assert result["actual"]["step"] == 1
+    assert result["category"] == "business_logic"

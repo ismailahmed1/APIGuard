@@ -12,3 +12,8 @@ NexStock is a warehouse and inventory management API. Every test starts from thi
 - Every product has an inventory record; products 6, 18, 26 and 27 are at or below their minimum.
 - There are 150 stock movements of type IN and OUT.
 - IDs above 30 do not exist for products or above 10 for categories.
+- Permissions: both roles can read everything, and create and update categories and products.
+  Only `admin` can delete a category or a product; `manager` gets 403.
+- Every response is an envelope: {"success": true, "data": ..., "message": "..."}. Read values from
+  `data`, for example `data.id`. A list endpoint returns the list in `data`.
+- `GET /api/products?category_id=N` returns only the products of category N.

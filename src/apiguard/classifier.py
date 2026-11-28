@@ -1,6 +1,7 @@
 """Classify each failed test into one FR-10 category with fixed rules."""
 
 import json
+import re
 from pathlib import Path
 
 # The eight FR-10 categories, in report order.
@@ -25,6 +26,11 @@ def _status(result):
 
 def _expected(result):
     return (result.get("expected") or {}).get("status")
+
+
+def _detail(result):
+    """The detail without the "step N: " prefix of a workflow step."""
+    return re.sub(r"^step \d+: ", "", result.get("detail") or "")
 
 
 def _success(status):
@@ -53,8 +59,13 @@ RULES = [
     ),
     ("VAL-1", "input_validation", lambda r: _expected(r) == 422 and _success(_status(r))),
     ("VAL-2", "input_validation", lambda r: _success(_expected(r)) and _status(r) == 422),
-    ("BIZ-1", "business_logic", lambda r: r["type"] == "stateful_workflow"),
-    ("BIZ-2", "business_logic", lambda r: _success(_expected(r)) and _status(r) in (404, 409)),
+    ("BIZ-1", "business_logic", lambda r: _detail(r).startswith("response value")),
+    (
+        "BIZ-2",
+        "business_logic",
+        lambda r: r["type"] == "stateful_workflow" and (_status(r) or 0) < 500,
+    ),
+    ("BIZ-3", "business_logic", lambda r: _success(_expected(r)) and _status(r) in (404, 409)),
     (
         "STA-1",
         "unexpected_status",

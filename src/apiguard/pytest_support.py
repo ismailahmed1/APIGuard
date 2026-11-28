@@ -16,7 +16,7 @@ from apiguard.config import load_config
 from apiguard.openapi import load_spec
 from apiguard.operations import extract_operations
 from apiguard.runner import _run_test, _Session
-from apiguard.validator import ANONYMOUS, MUTATING_METHODS
+from apiguard.validator import ANONYMOUS, MUTATING_METHODS, changes_data
 
 
 class Api:
@@ -45,11 +45,9 @@ class Api:
         body=None,
         test_id="test",
         test_type="happy_path",
+        checks=None,
+        steps=None,
     ):
-        # Each change-making test after the first starts from fresh seed data (FR-08).
-        if self.reset and self.dirty and method in MUTATING_METHODS:
-            self.session.reset()
-        self.dirty = self.dirty or method in MUTATING_METHODS
         test = {
             "id": test_id,
             "type": test_type,
@@ -61,7 +59,13 @@ class Api:
             "query_params": query_params or {},
             "body": body,
             "expected_status": expected_status,
+            "checks": checks or [],
+            "steps": steps or [],
         }
+        # Each change-making test after the first starts from fresh seed data (FR-08).
+        if self.reset and self.dirty and changes_data(test):
+            self.session.reset()
+        self.dirty = self.dirty or changes_data(test)
         result = self.session.redact(_run_test(test, self.by_key, self.session))
         if result["outcome"] != "passed":
             pytest.fail(f"{result['category']}: {result['detail']}", pytrace=False)

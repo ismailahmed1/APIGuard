@@ -5,8 +5,23 @@ import re
 
 from jsonschema import Draft202012Validator
 
-TEST_TYPES = ("happy_path", "schema_validation", "authentication", "boundary_value")
+TEST_TYPES = (
+    "happy_path",
+    "schema_validation",
+    "authentication",
+    "authorization",
+    "boundary_value",
+    "fuzz",
+    "stateful_workflow",
+)
 MUTATING_METHODS = ("POST", "PUT", "PATCH", "DELETE")
+
+
+def changes_data(test):
+    """True when the test or one of its workflow steps can change the application data."""
+    return any(step["method"] in MUTATING_METHODS for step in [test, *test.get("steps", [])])
+
+
 ANONYMOUS = "anonymous"
 FIELDS = {
     "id": str,
@@ -20,6 +35,22 @@ FIELDS = {
     "body_json": str,
     "expected_status": int,
 }
+STEP_FIELDS = {
+    k: FIELDS[k]
+    for k in (
+        "method",
+        "path",
+        "role",
+        "path_params",
+        "query_params",
+        "body_json",
+        "expected_status",
+    )
+}
+# A value from an earlier response in a workflow: {{r0.data.id}} is data.id of the first response.
+RESPONSE_REF = re.compile(r"\{\{r(\d+)\.([^{}]+)\}\}")
+# A response path: names, list indexes and [*] for every element, such as data[*].category_id.
+CHECK_PATH = re.compile(r"(?:[A-Za-z_][\w-]*|\[\d+\]|\[\*\])(?:\.[A-Za-z_][\w-]*|\[\d+\]|\[\*\])*")
 
 
 class InvalidTest(Exception):
@@ -45,16 +76,48 @@ def validate_tests(raw_tests, operations, roles):
 def _validate(raw, by_key, roles):
     if not isinstance(raw, dict):
         raise InvalidTest("test is not an object")
-    for field, kind in FIELDS.items():
+    _check_fields(raw, FIELDS)
+    if not re.fullmatch(r"[A-Za-z0-9_.-]+", raw["id"]):
+        raise InvalidTest("test id may only contain letters, digits, '.', '_' and '-'")
+    if raw["type"] not in TEST_TYPES:
+        raise InvalidTest(f"unsupported test type '{raw['type']}'")
+
+    test = {
+        "id": raw["id"],
+        "type": raw["type"],
+        "description": raw["description"],
+        **_request(raw, raw["type"], by_key, roles, first=True),
+    }
+    steps = raw.get("steps") or []
+    if not isinstance(steps, list):
+        raise InvalidTest("field 'steps' must be a list")
+    if raw["type"] == "stateful_workflow" and not steps:
+        raise InvalidTest("a stateful workflow test needs one or more steps")
+    if raw["type"] != "stateful_workflow" and steps:
+        raise InvalidTest("only stateful workflow tests can have steps")
+    test["steps"] = []
+    for number, step in enumerate(steps, start=1):
+        if not isinstance(step, dict):
+            raise InvalidTest(f"step {number} is not an object")
+        try:
+            _check_fields(step, STEP_FIELDS)
+            request = _request(step, "workflow_step", by_key, roles, first=False, count=number)
+        except InvalidTest as exc:
+            raise InvalidTest(f"step {number}: {exc}") from exc
+        test["steps"].append(request)
+    return test
+
+
+def _check_fields(raw, fields):
+    for field, kind in fields.items():
         if field not in raw:
             raise InvalidTest(f"missing required field '{field}'")
         if not isinstance(raw[field], kind) or (kind is int and isinstance(raw[field], bool)):
             raise InvalidTest(f"field '{field}' must be a {kind.__name__}")
 
-    if not re.fullmatch(r"[A-Za-z0-9_.-]+", raw["id"]):
-        raise InvalidTest("test id may only contain letters, digits, '.', '_' and '-'")
-    if raw["type"] not in TEST_TYPES:
-        raise InvalidTest(f"unsupported test type '{raw['type']}'")
+
+def _request(raw, test_type, by_key, roles, first, count=0):
+    """Validate one request of a test, and return it in runner format."""
     method = raw["method"].upper()
     operation = by_key.get((method, raw["path"]))
     if operation is None:
@@ -64,6 +127,12 @@ def _validate(raw, by_key, roles):
 
     path_params = _pairs(raw["path_params"], "path_params")
     query_params = _pairs(raw["query_params"], "query_params")
+    references = json.dumps([path_params, query_params, raw["body_json"]])
+    for match in RESPONSE_REF.finditer(references):
+        if first or int(match.group(1)) >= count:
+            raise InvalidTest(f"{match.group(0)} names a response that does not exist yet")
+    uses_responses = bool(RESPONSE_REF.search(references))
+
     declared = {p.location: set() for p in operation.parameters}
     for parameter in operation.parameters:
         declared[parameter.location].add(parameter.name)
@@ -80,14 +149,22 @@ def _validate(raw, by_key, roles):
     if unknown_query:
         raise InvalidTest(f"unknown query parameter '{unknown_query[0]}'")
 
-    body = _body(raw["body_json"], operation, raw["type"])
+    body = _body(raw["body_json"], operation, test_type)
+    checks = _checks(raw.get("checks") or [])
 
     status = raw["expected_status"]
-    if raw["type"] == "authentication":
+    if test_type == "authentication":
         if not operation.requires_auth:
             raise InvalidTest("authentication test for an operation that does not require a token")
         if raw["role"] != ANONYMOUS or status not in (401, 403):
             raise InvalidTest("authentication tests must send no token and expect 401 or 403")
+    elif test_type == "authorization":
+        if raw["role"] == ANONYMOUS or not operation.requires_auth:
+            raise InvalidTest(
+                "authorization tests must use a role on an operation that needs a token"
+            )
+        if status != 403:
+            raise InvalidTest("authorization tests must expect 403 for a role without permission")
     else:
         if operation.requires_auth and raw["role"] == ANONYMOUS:
             raise InvalidTest("operation requires a token; use a role or an authentication test")
@@ -95,11 +172,14 @@ def _validate(raw, by_key, roles):
         # FastAPI rarely documents 404, but a missing resource is a normal expected result.
         if not documented and not (status == 404 and expected_path):
             raise InvalidTest(f"expected status {status} is not documented for this operation")
+        if test_type == "fuzz" and not 400 <= status < 500:
+            raise InvalidTest("fuzz tests must expect a 4xx rejection, not a crash or a success")
         # The expected result must agree with the documented schema. This catches miscounted
-        # values, such as a "256-character" string with 250 characters.
-        rejection = raw["type"] in ("schema_validation", "boundary_value") and status == 422
-        success = raw["type"] in ("happy_path", "boundary_value") and 200 <= status < 300
-        if rejection or success:
+        # values, such as a "256-character" string with 250 characters. Values from earlier
+        # responses are not known until the test runs.
+        rejection = test_type in ("schema_validation", "boundary_value") and status == 422
+        success = test_type in ("happy_path", "boundary_value") and 200 <= status < 300
+        if (rejection or success) and not uses_responses:
             matches = _inputs_match_schema(operation, path_params, query_params, body)
             if rejection and matches:
                 raise InvalidTest(
@@ -111,11 +191,10 @@ def _validate(raw, by_key, roles):
                     f"expects {status}, but an input breaks the documented schema "
                     "(check the values against the limits)"
                 )
+    if checks and not 200 <= status < 300:
+        raise InvalidTest("response value checks need a success status")
 
     return {
-        "id": raw["id"],
-        "type": raw["type"],
-        "description": raw["description"],
         "method": method,
         "path": raw["path"],
         "role": raw["role"],
@@ -123,7 +202,26 @@ def _validate(raw, by_key, roles):
         "query_params": query_params,
         "body": body,
         "expected_status": status,
+        "checks": checks,
     }
+
+
+def _checks(items):
+    """Return response value checks as [{"path": ..., "equals": value}]."""
+    if not isinstance(items, list):
+        raise InvalidTest("field 'checks' must be a list")
+    checks = []
+    for item in items:
+        if not isinstance(item, dict) or not isinstance(item.get("path"), str):
+            raise InvalidTest("each check needs a path and an expected value")
+        if not CHECK_PATH.fullmatch(item["path"]):
+            raise InvalidTest(f"check path '{item['path']}' is not valid")
+        try:
+            expected = json.loads(item.get("equals_json", ""))
+        except (TypeError, json.JSONDecodeError) as exc:
+            raise InvalidTest(f"check '{item['path']}' needs a JSON value in equals_json") from exc
+        checks.append({"path": item["path"], "equals": _expand(expected)})
+    return checks
 
 
 def _pairs(items, field):

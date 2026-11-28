@@ -18,7 +18,7 @@ from jsonschema.exceptions import SchemaError
 from referencing.exceptions import Unresolvable
 
 from apiguard import classifier
-from apiguard.validator import ANONYMOUS, MUTATING_METHODS
+from apiguard.validator import ANONYMOUS, RESPONSE_REF, changes_data
 
 PLACEHOLDER = re.compile(r"\{\{(\w+)\.(email|password)\}\}")
 JWT = re.compile(r"eyJ[\w-]+\.[\w-]+\.[\w-]+")
@@ -86,7 +86,7 @@ def run_suite(config, metadata, tests, operations, runs_dir, label=None, reset=T
 
     # Reads run first. Each change-making test after the first starts from fresh seed data,
     # so every test sees the same starting data in every run (FR-08, NFR-01).
-    ordered = sorted(tests, key=lambda test: test["method"] in MUTATING_METHODS)
+    ordered = sorted(tests, key=changes_data)
     resets, dirty, results = 0, False, []
     if reset:
         session.reset()
@@ -105,11 +105,11 @@ def run_suite(config, metadata, tests, operations, runs_dir, label=None, reset=T
                 result = _result(test, "not_run", "infrastructure_error", "run time limit")
                 results.append(classifier.apply(result))
                 continue
-            if reset and dirty and test["method"] in MUTATING_METHODS:
+            if reset and dirty and changes_data(test):
                 session.reset()
                 resets += 1
             results.append(classifier.apply(_run_test(test, by_key, session)))
-            dirty = dirty or test["method"] in MUTATING_METHODS
+            dirty = dirty or changes_data(test)
 
     # Secrets are removed before any result is sent to the AI model (FR-10, NFR-04).
     redacted = [session.redact(result) for result in results]
@@ -141,8 +141,27 @@ def run_suite(config, metadata, tests, operations, runs_dir, label=None, reset=T
 
 
 def _run_test(test, by_key, session):
-    operation = by_key.get((test["method"], test["path"]))
+    """Run the request of a test, then each workflow step. The first problem ends the test."""
     started = time.monotonic()
+    request = _saved_request(test)
+    requests = [test, *test.get("steps", [])]
+    responses, actual = [], None
+    for number, step in enumerate(requests):
+        prefix = f"step {number}: " if number else ""
+        try:
+            response, problem = _send_step(step, by_key, session, responses)
+        except _TestProblem as exc:
+            return _result(test, "error", exc.category, prefix + str(exc), request, started, actual)
+        actual = {"status": response.status_code, "body_excerpt": response.text[:EXCERPT_CHARS]}
+        if number:
+            actual["step"] = number
+        if problem:
+            return _result(test, "failed", None, prefix + problem, request, started, actual)
+        responses.append(_json(response))
+    return _result(test, "passed", None, None, request, started, actual)
+
+
+def _saved_request(test):
     request = {
         "method": test["method"],
         "path": test["path"],
@@ -150,35 +169,108 @@ def _run_test(test, by_key, session):
         "query": test["query_params"],
         "body": test["body"],  # Saved with placeholders, never with real credentials.
     }
-    try:
-        if operation is None:
-            raise _TestProblem(
-                "generated_test_error", "operation is no longer in the specification"
-            )
-        headers = {}
-        if test["role"] != ANONYMOUS:
-            headers["Authorization"] = f"Bearer {session.token(test['role'])}"
-        path = test["path"]
-        for name, value in test["path_params"].items():
-            path = path.replace("{" + name + "}", quote(session.fill(value), safe=""))
-        query = {name: session.fill(value) for name, value in test["query_params"].items()}
-        body = session.fill(test["body"])
-        response = session.send(test["method"], path, query, body, headers)
-    except _TestProblem as exc:
-        return _result(test, "error", exc.category, str(exc), request, started)
+    if test.get("steps"):
+        request["steps"] = [
+            {key: step[key] for key in ("method", "path", "path_params", "query_params", "body")}
+            for step in test["steps"]
+        ]
+    return request
 
-    actual = {"status": response.status_code, "body_excerpt": response.text[:EXCERPT_CHARS]}
-    expected = test["expected_status"]
-    if response.status_code == expected:
-        problem = _schema_problem(operation, response)
+
+def _send_step(step, by_key, session, responses):
+    """Send one request. Returns (response, problem); problem is None when the step passes."""
+    operation = by_key.get((step["method"], step["path"]))
+    if operation is None:
+        raise _TestProblem("generated_test_error", "operation is no longer in the specification")
+    headers = {}
+    if step["role"] != ANONYMOUS:
+        headers["Authorization"] = f"Bearer {session.token(step['role'])}"
+    path = step["path"]
+    for name, value in step["path_params"].items():
+        value = str(_resolve(value, responses))
+        path = path.replace("{" + name + "}", quote(session.fill(value), safe=""))
+    query = {
+        name: str(_resolve(session.fill(value), responses))
+        for name, value in step["query_params"].items()
+    }
+    body = _resolve(session.fill(step["body"]), responses)
+    response = session.send(step["method"], path, query, body, headers)
+
+    expected = step["expected_status"]
+    if response.status_code != expected:
+        if response.status_code >= 500:
+            return response, f"server error {response.status_code} (expected {expected})"
+        return response, f"unexpected status {response.status_code} (expected {expected})"
+    problem = _schema_problem(operation, response)
+    if problem:
+        return response, problem
+    for check in step.get("checks", []):
+        problem = _check_problem(_json(response), check)
         if problem:
-            return _result(test, "failed", None, problem, request, started, actual)
-        return _result(test, "passed", None, None, request, started, actual)
-    if response.status_code >= 500:
-        detail = f"server error {response.status_code} (expected {expected})"
-    else:
-        detail = f"unexpected status {response.status_code} (expected {expected})"
-    return _result(test, "failed", None, detail, request, started, actual)
+            return response, problem
+    return response, None
+
+
+def _json(response):
+    try:
+        return response.json()
+    except ValueError:
+        return None
+
+
+def _resolve(value, responses):
+    """Replace {{rN.path}} with a value from an earlier response of the same test."""
+    if isinstance(value, str):
+        whole = RESPONSE_REF.fullmatch(value)
+        if whole:  # Keep the type, so that an ID stays a number in a request body.
+            return _lookup(responses, whole)
+        return RESPONSE_REF.sub(lambda m: str(_lookup(responses, m)), value)
+    if isinstance(value, list):
+        return [_resolve(item, responses) for item in value]
+    if isinstance(value, dict):
+        return {key: _resolve(item, responses) for key, item in value.items()}
+    return value
+
+
+def _lookup(responses, match):
+    number = int(match.group(1))
+    values = _values(responses[number] if number < len(responses) else None, match.group(2))
+    if len(values) != 1:
+        raise _TestProblem(
+            "generated_test_error", f"{match.group(0)} is not a single value in the response"
+        )
+    return values[0]
+
+
+def _values(document, path):
+    """Values at a response path such as data.items[0].id or data[*].category_id."""
+    values = [document]
+    for part in re.findall(r"\[\*\]|\[\d+\]|[^.\[\]]+", path):
+        found = []
+        for value in values:
+            if part == "[*]" and isinstance(value, list):
+                found.extend(value)
+            elif part.startswith("[") and isinstance(value, list):
+                index = int(part[1:-1])
+                found.extend(value[index : index + 1])
+            elif isinstance(value, dict) and part in value:
+                found.append(value[part])
+        values = found
+    return values
+
+
+def _check_problem(document, check):
+    values = _values(document, check["path"])
+    if not values:
+        return f"response value at {check['path']} is missing"
+    for value in values:
+        if value != check["equals"]:
+            shown = json.dumps(value)[:60]
+            return (
+                f"response value at {check['path']} is {shown} "
+                f"(expected {json.dumps(check['equals'])[:60]})"
+            )
+    return None
 
 
 def _schema_problem(operation, response):
