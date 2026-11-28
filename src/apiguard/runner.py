@@ -1,5 +1,7 @@
 """Run a saved suite against the application without the AI model (FR-06)."""
 
+import base64
+import binascii
 import json
 import os
 import re
@@ -15,11 +17,16 @@ from jsonschema import Draft202012Validator
 from jsonschema.exceptions import SchemaError
 from referencing.exceptions import Unresolvable
 
+from apiguard import classifier
 from apiguard.validator import ANONYMOUS, MUTATING_METHODS
 
 PLACEHOLDER = re.compile(r"\{\{(\w+)\.(email|password)\}\}")
 JWT = re.compile(r"eyJ[\w-]+\.[\w-]+\.[\w-]+")
 EXCERPT_CHARS = 300
+# Log in again when a token expires within this time.
+REFRESH_MARGIN_SECONDS = 30
+# Keys that APIGuard reads from the environment, which must never appear in its output.
+SECRET_VARIABLES = ("ANTHROPIC_API_KEY", "ANTHROPIC_AUTH_TOKEN")
 
 
 class RunError(Exception):
@@ -68,7 +75,7 @@ def get_token(config, role):
             raise RunError(str(exc)) from exc
 
 
-def run_suite(config, metadata, tests, operations, runs_dir, label=None, reset=True):
+def run_suite(config, metadata, tests, operations, runs_dir, label=None, reset=True, ai=None):
     """Run the tests and save the results. Returns (run directory, summary, results)."""
     timeouts = config["timeouts"]
     by_key = {(op.method, op.path): op for op in operations}
@@ -95,15 +102,19 @@ def run_suite(config, metadata, tests, operations, runs_dir, label=None, reset=T
         session.client = client
         for test in ordered:
             if time.monotonic() > deadline:
-                results.append(_result(test, "not_run", "infrastructure_error", "run time limit"))
+                result = _result(test, "not_run", "infrastructure_error", "run time limit")
+                results.append(classifier.apply(result))
                 continue
             if reset and dirty and test["method"] in MUTATING_METHODS:
                 session.reset()
                 resets += 1
-            results.append(_run_test(test, by_key, session))
+            results.append(classifier.apply(_run_test(test, by_key, session)))
             dirty = dirty or test["method"] in MUTATING_METHODS
 
-    summary = _summary(results)
+    # Secrets are removed before any result is sent to the AI model (FR-10, NFR-04).
+    redacted = [session.redact(result) for result in results]
+    ai_note = classifier.classify_with_ai(redacted, ai) if ai else None
+    summary = _summary(redacted)
     run_id = started.strftime("%Y%m%d-%H%M%S")
     directory = Path(runs_dir) / config["name"] / run_id
     directory.mkdir(parents=True, exist_ok=True)
@@ -118,10 +129,11 @@ def run_suite(config, metadata, tests, operations, runs_dir, label=None, reset=T
         "seconds": round(time.monotonic() - start, 2),
         "requests": session.requests,
         "resets": resets,
-        "ai_model_used": False,
+        "ai_model_used": bool(ai and ai.usage.calls),
+        "ai_usage": ai.usage.as_dict(ai.model) if ai else None,
+        "ai_note": ai_note,
         **summary,
     }
-    redacted = [session.redact(result) for result in results]
     (directory / "results.json").write_text(json.dumps(redacted, indent=2) + "\n", "utf-8")
     (directory / "run.json").write_text(json.dumps(run, indent=2) + "\n", "utf-8")
     (Path(runs_dir) / config["name"] / "LATEST").write_text(run_id + "\n", "utf-8")
@@ -140,7 +152,9 @@ def _run_test(test, by_key, session):
     }
     try:
         if operation is None:
-            raise _TestProblem("test_error", "operation is no longer in the specification")
+            raise _TestProblem(
+                "generated_test_error", "operation is no longer in the specification"
+            )
         headers = {}
         if test["role"] != ANONYMOUS:
             headers["Authorization"] = f"Bearer {session.token(test['role'])}"
@@ -158,13 +172,13 @@ def _run_test(test, by_key, session):
     if response.status_code == expected:
         problem = _schema_problem(operation, response)
         if problem:
-            return _result(test, "failed", "api_failure", problem, request, started, actual)
+            return _result(test, "failed", None, problem, request, started, actual)
         return _result(test, "passed", None, None, request, started, actual)
     if response.status_code >= 500:
         detail = f"server error {response.status_code} (expected {expected})"
     else:
         detail = f"unexpected status {response.status_code} (expected {expected})"
-    return _result(test, "failed", "api_failure", detail, request, started, actual)
+    return _result(test, "failed", None, detail, request, started, actual)
 
 
 def _schema_problem(operation, response):
@@ -222,7 +236,13 @@ class _Session:
         self.client = None
         self.requests = 0
         self.tokens = {}
+        self.expiry = {}
         self.secrets = set()
+        # Register known secrets now, so that output is clean even if a test leaks one.
+        variables = list(SECRET_VARIABLES)
+        for settings in self.auth.get("roles", {}).values():
+            variables.append(settings.get("password_env"))
+        self.secrets.update(v for v in (os.environ.get(n or "") for n in variables) if v)
 
     def reset(self):
         command = self.config["reset"].get("command")
@@ -262,6 +282,9 @@ class _Session:
         return value
 
     def token(self, role):
+        expiry = self.expiry.get(role)
+        if expiry is not None and time.time() >= expiry - REFRESH_MARGIN_SECONDS:
+            del self.tokens[role]  # The token has expired, or soon will; log in again.
         if role not in self.tokens:
             field = self.auth.get("username_field", "email")
             body = {
@@ -278,6 +301,7 @@ class _Session:
                     f"login as '{role}' failed with HTTP {response.status_code}",
                 )
             self.tokens[role] = token
+            self.expiry[role] = _expiry(token)
             self.secrets.add(token)
         return self.tokens[role]
 
@@ -301,3 +325,16 @@ class _Session:
         if isinstance(value, dict):
             return {key: self.redact(item) for key, item in value.items()}
         return value
+
+
+def _expiry(token):
+    """Return the 'exp' time of a JWT, or None when the token has no readable expiry."""
+    try:
+        payload = token.split(".")[1]
+        claims = json.loads(base64.urlsafe_b64decode(payload + "=" * (-len(payload) % 4)))
+    except (IndexError, ValueError, binascii.Error):
+        return None
+    expiry = claims.get("exp") if isinstance(claims, dict) else None
+    if isinstance(expiry, bool) or not isinstance(expiry, (int, float)):
+        return None
+    return expiry
