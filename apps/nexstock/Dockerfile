@@ -17,6 +17,9 @@ RUN if [ -n "$NEXSTOCK_FAULT" ]; then \
       patch --directory=/nexstock --strip=1 --forward < "/tmp/faults/$NEXSTOCK_FAULT.patch"; \
     fi
 
+# Log each request and login as JSON for the security monitor (FR-11).
+COPY apiguard_logging.py /nexstock/backend/apiguard_logging.py
+
 ENV PYTHONUNBUFFERED=1
 EXPOSE 8000
-CMD ["uvicorn", "app.main:app", "--host", "0.0.0.0", "--port", "8000"]
+CMD ["uvicorn", "--factory", "apiguard_logging:create_app", "--host", "0.0.0.0", "--port", "8000"]
