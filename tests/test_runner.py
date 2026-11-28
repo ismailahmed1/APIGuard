@@ -1,11 +1,15 @@
+import base64
 import json
 import subprocess
+import time
+from pathlib import Path
 
 import httpx
 import pytest
 from shop_spec import SHOP
 
 from apiguard.operations import extract_operations
+from apiguard.reporting import format_run
 from apiguard.runner import RunError, get_token, load_suite, run_suite
 
 TOKEN = "eyJhbGciOiJIUzI1NiJ9.eyJzdWIiOiIxIn0.c2lnbmF0dXJl"
@@ -285,3 +289,56 @@ def test_each_request_uses_a_fresh_connection(server, monkeypatch):
     monkeypatch.setattr("apiguard.runner.httpx.Client", client)
     run([make_test("list", "GET", "/api/products")])
     assert created[0]["limits"].max_keepalive_connections == 0
+
+
+def jwt(claims):
+    payload = base64.urlsafe_b64encode(json.dumps(claims).encode()).decode().rstrip("=")
+    return f"eyJhbGciOiJIUzI1NiJ9.{payload}.c2lnbmF0dXJl"
+
+
+def test_expired_token_is_refreshed(server, monkeypatch):
+    issued = []
+
+    def expiring(request):
+        if request.url.path == "/api/auth/login":
+            # Each token expires 10 seconds after it is issued: inside the refresh margin.
+            issued.append(jwt({"sub": "1", "exp": int(time.time()) + 10, "n": len(issued)}))
+            return httpx.Response(200, json={"data": {"access_token": issued[-1]}})
+        if request.headers.get("Authorization") != f"Bearer {issued[-1]}":
+            return httpx.Response(401, json={"detail": "Token expired"})
+        return httpx.Response(200, json={"data": []})
+
+    server["handler"]["value"] = expiring
+    tests = [make_test("one", "GET", "/api/products"), make_test("two", "GET", "/api/products")]
+    _, _, results = run(tests)
+    assert [r["outcome"] for r in results] == ["passed", "passed"]
+    assert len(issued) == 2
+
+
+def test_token_without_expiry_is_reused(server):
+    tests = [make_test("one", "GET", "/api/products"), make_test("two", "GET", "/api/products")]
+    _, summary, _ = run(tests)
+    assert summary["requests"] == 3  # One login and two tests.
+
+
+def test_no_credential_in_any_saved_or_shown_output(server, monkeypatch, capsys):
+    """NFR-04: search every report and log for the test credentials."""
+    api_key = "sk-ant-test-key-0001"
+    monkeypatch.setenv("ANTHROPIC_API_KEY", api_key)
+
+    def leaky(request):
+        if request.url.path == "/api/auth/login":
+            return shop(request)
+        # A faulty API that echoes the credentials and the token back.
+        text = f"{PASSWORD} {api_key} {request.headers.get('Authorization')}"
+        return httpx.Response(500, text=text)
+
+    server["handler"]["value"] = leaky
+    _, summary, results = run([make_test("list", "GET", "/api/products")])
+    print(format_run(summary, results))
+
+    saved = "".join(path.read_text() for path in Path("runs").rglob("*") if path.is_file())
+    assert "[REDACTED" in saved
+    for text in (saved, capsys.readouterr().out):
+        for secret in (PASSWORD, api_key, TOKEN):
+            assert secret not in text
