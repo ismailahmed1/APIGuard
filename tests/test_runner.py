@@ -285,3 +285,39 @@ def test_each_request_uses_a_fresh_connection(server, monkeypatch):
     monkeypatch.setattr("apiguard.runner.httpx.Client", client)
     run([make_test("list", "GET", "/api/products")])
     assert created[0]["limits"].max_keepalive_connections == 0
+
+
+def test_failures_are_redacted_before_the_ai_model_sees_them(server, monkeypatch):
+    from test_generation import FakeAnthropic
+
+    from apiguard.ai import AIClient
+    from apiguard.classifier import UNCLASSIFIED
+
+    monkeypatch.setattr("apiguard.classifier.classify", lambda result: (UNCLASSIFIED, None))
+    server["handler"]["value"] = lambda r: (
+        shop(r) if r.url.path == "/api/auth/login" else httpx.Response(500, text=PASSWORD + TOKEN)
+    )
+    answer = json.dumps({"classifications": [{"id": "list", "category": "unexpected_status"}]})
+    fake = FakeAnthropic([(answer, "end_turn")])
+    ai = AIClient("claude-opus-5-5", {}, client=fake)
+    _, summary, results = run_suite(
+        config(),
+        {"suite_id": "s1"},
+        [make_test("list", "GET", "/api/products")],
+        OPERATIONS,
+        "runs",
+        ai=ai,
+    )
+    prompt = fake.requests[0]["messages"][0]["content"]
+    assert PASSWORD not in prompt
+    assert TOKEN not in prompt
+    assert results[0]["classified_by"] == "ai"
+    assert summary["ai_model_used"] is True
+    assert summary["ai_usage"]["calls"] == 1
+    assert summary["categories"] == {"unexpected_status": 1}
+
+
+def test_run_without_ai_records_no_ai_use(server):
+    _, summary, _ = run([make_test("list", "GET", "/api/products")])
+    assert summary["ai_model_used"] is False
+    assert summary["ai_usage"] is None

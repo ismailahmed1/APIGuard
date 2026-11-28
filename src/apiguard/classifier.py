@@ -95,3 +95,70 @@ def accuracy(path):
                 {"name": case["name"], "expected": case["expected_category"], "got": category}
             )
     return len(cases) - len(wrong), len(cases), wrong
+
+
+AI_SYSTEM = """You classify failed API tests for APIGuard. For each failure, select the one \
+category that best explains it. Use only the categories that you are given. Base your answer on the \
+operation, the request, the expected result, the actual result and the detail."""
+
+
+def classify_with_ai(results, ai):
+    """Send only the unclassified failures to the AI model. Results must be redacted first.
+
+    Returns a short note for the run record, or None when no failure needed the model.
+    """
+    from apiguard.ai import AIError  # Runs without the AI model never import the SDK client.
+
+    pending = {r["id"]: r for r in results if r["category"] == UNCLASSIFIED}
+    if not pending:
+        return None
+    failures = [
+        {
+            "id": r["id"],
+            "test_type": r["type"],
+            "operation": r["operation"],
+            "role": r["role"],
+            "request": r.get("request"),
+            "expected": r.get("expected"),
+            "actual": r.get("actual"),
+            "detail": r.get("detail"),
+        }
+        for r in pending.values()
+    ]
+    prompt = (
+        "Categories:\n"
+        + "\n".join(f"- {key}: {label}" for key, label in CATEGORIES.items())
+        + "\n\nFailures:\n"
+        + json.dumps(failures, indent=1)
+    )
+    schema = {
+        "type": "object",
+        "additionalProperties": False,
+        "required": ["classifications"],
+        "properties": {
+            "classifications": {
+                "type": "array",
+                "items": {
+                    "type": "object",
+                    "additionalProperties": False,
+                    "required": ["id", "category"],
+                    "properties": {
+                        "id": {"type": "string"},
+                        "category": {"type": "string", "enum": list(CATEGORIES)},
+                    },
+                },
+            }
+        },
+    }
+    try:
+        answer = ai.generate_json(AI_SYSTEM, prompt, schema, max_tokens=4000)
+    except AIError as exc:
+        return f"AI classification stopped: {exc}"
+    for item in answer.get("classifications", []):
+        result = pending.get(item.get("id"))
+        # Accept only the eight categories, and only for a failure that was sent.
+        if result is None or item.get("category") not in CATEGORIES:
+            continue
+        result["category"] = item["category"]
+        result["classified_by"] = "ai"
+    return None

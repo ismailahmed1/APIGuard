@@ -45,7 +45,12 @@ def format_run(run, results):
     lines = [
         (
             f"Run {run['run_id']}{label}: suite {run['suite_id']}, {run['total']} tests, "
-            f"{run['requests']} requests, {run['seconds']} s, no AI model used"
+            f"{run['requests']} requests, {run['seconds']} s, "
+            + (
+                "AI model used for classification"
+                if run.get("ai_model_used")
+                else "no AI model used"
+            )
         ),
         "  ".join(f"{name} {outcomes.get(name, 0)}" for name in ("passed", "failed", "error"))
         + (f"  not run {outcomes['not_run']}" if outcomes.get("not_run") else ""),
@@ -65,9 +70,20 @@ def format_run(run, results):
         if not in_category:
             continue
         lines += ["", f"{label_text} ({len(in_category)}):"]
-        rows = [(r["id"], r["operation"], r["role"], r["detail"]) for r in in_category]
+        rows = [
+            (r["id"], r["operation"], r["role"], r["detail"], _classified_by(r))
+            for r in in_category
+        ]
         lines += ["  " + line for line in table(rows)]
+    if run.get("ai_note"):
+        lines += ["", run["ai_note"]]
     return "\n".join(lines)
+
+
+def _classified_by(result):
+    return {"rule": f"rule {result.get('rule')}", "ai": "AI model"}.get(
+        result.get("classified_by"), "-"
+    )
 
 
 def compare_runs(base, base_results, run, results):
