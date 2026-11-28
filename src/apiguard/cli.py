@@ -14,6 +14,7 @@ from apiguard.baseline import BaselineError, compare_baselines, run_baseline
 from apiguard.builder import build_pytest, collect
 from apiguard.config import ConfigError, load_config
 from apiguard.generator import generate_suite
+from apiguard.generator_pytest import generate_pytest_suite
 from apiguard.openapi import SpecError, get_response, load_spec
 from apiguard.operations import extract_operations
 from apiguard.reporting import compare_runs, format_run, format_suite, table
@@ -51,6 +52,13 @@ def main(argv=None):
     command("spec", "Show a summary of the operations in the OpenAPI specification.")
     generate = command("generate", "Generate and save a test suite with the AI model.")
     generate.add_argument("--tag", action="append", default=[], help="Only this operation tag.")
+    generate.add_argument(
+        "--method",
+        choices=("definitions", "pytest"),
+        default="definitions",
+        help="definitions: structured test definitions (Method B, default); "
+        "pytest: Pytest files written by the model (Method A).",
+    )
     run = command("run", "Run a saved test suite without the AI model.")
     run.add_argument("--suite", help="Suite ID (default: the latest suite).")
     run.add_argument("--label", help="Label for this run, such as a seeded fault ID.")
@@ -152,6 +160,8 @@ def cmd_generate(args):
         effort=settings.get("effort", "medium"),
     )
     print(f"Generating tests with {ai.model} for tags: {', '.join(args.tag) or 'all'} ...")
+    if args.method == "pytest":
+        return generate_pytest(config, spec, operations, args.tag, ai, context, roles)
     try:
         directory, metadata = generate_suite(
             config["name"], spec, operations, args.tag, ai, context, roles, SUITES_DIR
@@ -162,6 +172,30 @@ def cmd_generate(args):
     print(format_suite(metadata, excluded))
     print(f"\nSaved to {directory}")
     return 0 if metadata["counts"]["valid"] else 1
+
+
+def generate_pytest(config, spec, operations, tags, ai, context, roles):
+    try:
+        directory, metadata = generate_pytest_suite(
+            config["name"], spec, operations, tags, ai, context, roles, SUITES_DIR
+        )
+    except AIError as exc:
+        raise Failure(f"AI error: {exc}.", 1) from exc
+    counts, usage = metadata["counts"], metadata["ai_usage"]
+    print(
+        f"Saved suite {metadata['suite_id']}: {counts['files_saved']} Pytest files "
+        f"({counts['files_rejected']} rejected), {counts['files_that_run']} files and "
+        f"{counts['tests_collected']} tests that Pytest can collect"
+    )
+    cost = f"${usage['cost_usd']:.2f}" if usage.get("cost_usd") is not None else "unknown cost"
+    print(
+        f"AI model {metadata['model']}: {usage['calls']} calls, {usage['input_tokens']} input "
+        f"and {usage['output_tokens']} output tokens, {cost}, {metadata['generation_seconds']} s"
+    )
+    if metadata.get("stopped_reason"):
+        print(f"Generation stopped early: {metadata['stopped_reason']}")
+    print(f"\nSaved to {directory}\nRun with: python -m pytest {directory / 'pytest'}")
+    return 0 if counts["files_that_run"] else 1
 
 
 def cmd_run(args):
