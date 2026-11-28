@@ -22,6 +22,10 @@ APIGuard currently supports:
 - Summarizing every operation in the specification with `apiguard spec`.
 - Generating test suites with Claude, validating them and saving them with `apiguard generate`.
 - Running saved suites without the AI model with `apiguard run`, and reading results with `apiguard report`.
+- Classifying each failure into one FR-10 category with fixed rules. `apiguard run --ai-classify` sends only the failures that no rule classifies to the AI model, after secrets are removed.
+- Showing one report with the totals, the failures by category and the security alerts. `apiguard report <app> --run <run-id> --export` also saves it as `report.md` and `report.json` in the run directory.
+- Recording the evaluation metrics of each run in `eval/metrics/<app>.jsonl`: generation time, run time, requests, AI calls, tokens, cost, endpoint coverage and executable-test rate.
+- Running a saved suite more than one time with `apiguard validate <app> --runs N`. It flags tests with different results and saves the saved, rejected and flaky tests in `validation.json` in the suite directory.
 - Converting a saved suite to Pytest files with `apiguard build`. See [docs/test-definitions.md](docs/test-definitions.md) for the test-definition schema.
 - Comparing two runs with `apiguard compare`, and running a Schemathesis baseline with `apiguard baseline`.
 - Evaluating fault detection against seeded NexStock faults with `scripts/evaluate_faults.py`.
@@ -122,6 +126,28 @@ How the environment is made reproducible:
 - **Fixed seed data:** NexStock's seed scripts use random values and the current time, so running them twice gives different data. `apps/nexstock/seed.sql` is a database dump made once from those scripts by `apps/nexstock/make_seed.sh`. The reset service drops the `public` schema and loads this dump. Run `make_seed.sh` (from a POSIX shell such as Git Bash) only when the pinned commit changes, and commit the new `seed.sql`.
 
 The seeded Admin and Manager accounts are defined in NexStock's `backend/scripts/seed_users.py`. Put their email addresses and passwords in the environment variables listed in `.env.example`.
+
+### NexStock logs
+
+The container starts NexStock through `apps/nexstock/apiguard_logging.py`. This module writes one JSON line for each request, and one more line for each login:
+
+```json
+{"source": "apiguard", "event": "request", "time": "2026-11-28T00:18:06.764+00:00", "method": "GET", "path": "/api/products", "status": 200, "user": "1", "role": "Admin", "ip": "172.18.0.1"}
+```
+
+`event` is `request`, `login_success` or `login_failure`. `user` and `role` come from a valid token. A login line gives the email address as `user`. The lines contain no passwords and no tokens. Show them with `docker compose -f apps/nexstock/compose.yaml logs api`.
+
+### Security monitoring
+
+After each `apiguard run`, APIGuard reads the API container logs for the run time. It applies the rules in `configs/monitor/rules.yaml` and saves the matches in `monitor.json` and the alerts in `alerts.json` in the run directory. Each alert has the rule, app, time, severity and up to 20 log lines, with secrets removed. Repeated matches of one rule in one time window make one alert. A rule matches when a number of events with the given fields occur in a time window.
+
+Check the rules against live NexStock with known normal and suspicious requests:
+
+```powershell
+.\.venv\Scripts\python.exe scripts/make_security_events.py
+```
+
+Each suspicious step must trigger its rule. The normal step must trigger no rule.
 
 NexStock v1 has known defects, which APIGuard should detect: `GET /api/auth/me` and `GET /api/inventory` return HTTP 500 for every authenticated request.
 
