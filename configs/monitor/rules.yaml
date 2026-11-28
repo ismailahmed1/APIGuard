@@ -1,0 +1,42 @@
+# Security-monitoring rules (FR-11). A rule matches when `threshold` events that meet every
+# condition in `match` occur within `window_seconds`, for one value of the `group_by` field.
+# A condition is a value, a list of allowed values, or {gte: N} / {lte: N}.
+- id: MON-01
+  name: Repeated failed logins
+  severity: high
+  match: {event: login_failure}
+  group_by: ip
+  threshold: 5
+  window_seconds: 60
+
+- id: MON-02
+  name: Repeated requests without valid authentication
+  severity: medium
+  match: {event: request, status: 401}
+  group_by: ip
+  threshold: 10
+  window_seconds: 60
+
+- id: MON-03
+  name: Repeated forbidden requests by one user
+  severity: high
+  match: {event: request, status: 403}
+  group_by: user
+  threshold: 3
+  window_seconds: 60
+
+- id: MON-04
+  name: Burst of server errors
+  severity: medium
+  match: {event: request, status: {gte: 500}}
+  group_by: path
+  threshold: 10
+  window_seconds: 60
+
+- id: MON-05
+  name: Request flood from one address
+  severity: low
+  match: {event: request}
+  group_by: ip
+  threshold: 300
+  window_seconds: 10

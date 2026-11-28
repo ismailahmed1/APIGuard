@@ -3,6 +3,7 @@ import json
 import os
 import re
 import sys
+from datetime import UTC, datetime
 from pathlib import Path
 
 import httpx
@@ -11,12 +12,28 @@ from dotenv import load_dotenv
 from apiguard import __version__
 from apiguard.ai import AIClient, AIError
 from apiguard.baseline import BaselineError, compare_baselines, run_baseline
+from apiguard.builder import build_pytest, collect
 from apiguard.config import ConfigError, load_config
+from apiguard.docker_run import run_in_docker
 from apiguard.generator import generate_suite
+from apiguard.generator_pytest import generate_pytest_suite
+from apiguard.metrics import record_metrics, run_metrics
+from apiguard.monitor import MonitorError, monitor_run
 from apiguard.openapi import SpecError, get_response, load_spec
 from apiguard.operations import extract_operations
-from apiguard.reporting import compare_runs, format_run, format_suite, table
+from apiguard.reporting import (
+    build_report,
+    compare_runs,
+    format_alerts,
+    format_run,
+    format_suite,
+    format_validation,
+    report_json,
+    report_markdown,
+    table,
+)
 from apiguard.runner import RunError, get_token, load_suite, reset_app, run_suite
+from apiguard.stability import validation_report
 
 MEDIA_LABELS = {
     "application/json": "json",
@@ -50,12 +67,42 @@ def main(argv=None):
     command("spec", "Show a summary of the operations in the OpenAPI specification.")
     generate = command("generate", "Generate and save a test suite with the AI model.")
     generate.add_argument("--tag", action="append", default=[], help="Only this operation tag.")
+    generate.add_argument(
+        "--method",
+        choices=("definitions", "pytest"),
+        default="definitions",
+        help="definitions: structured test definitions (Method B, default); "
+        "pytest: Pytest files written by the model (Method A).",
+    )
     run = command("run", "Run a saved test suite without the AI model.")
     run.add_argument("--suite", help="Suite ID (default: the latest suite).")
     run.add_argument("--label", help="Label for this run, such as a seeded fault ID.")
     run.add_argument("--no-reset", action="store_true", help="Do not reset the test data.")
+    run.add_argument(
+        "--ai-classify",
+        action="store_true",
+        help="Send failures that no rule classifies to the AI model.",
+    )
+
+    validate = command(
+        "validate", "Run a saved suite more than one time and flag tests with different results."
+    )
+    validate.add_argument("--suite", help="Suite ID (default: the latest suite).")
+    validate.add_argument("--runs", type=int, default=3, help="Number of runs (default: 3).")
+    run.add_argument(
+        "--docker",
+        action="store_true",
+        help="Run the suite's Pytest files in a container on the app's Docker network.",
+    )
+    build = command("build", "Convert a saved suite to Pytest files.")
+    build.add_argument("--suite", help="Suite ID (default: the latest suite).")
     report = command("report", "Show the report of a saved run.")
     report.add_argument("--run", help="Run ID (default: the latest run).")
+    report.add_argument(
+        "--export",
+        action="store_true",
+        help="Also save the report as report.md and report.json in the run directory.",
+    )
     compare = command("compare", "Find tests that pass in a base run and fail in another run.")
     compare.add_argument("base", help="Base run ID or label, usually the original app.")
     compare.add_argument("other", help="Run ID or label to compare, usually a seeded fault.")
@@ -149,6 +196,8 @@ def cmd_generate(args):
         effort=settings.get("effort", "medium"),
     )
     print(f"Generating tests with {ai.model} for tags: {', '.join(args.tag) or 'all'} ...")
+    if args.method == "pytest":
+        return generate_pytest(config, spec, operations, args.tag, ai, context, roles)
     try:
         directory, metadata = generate_suite(
             config["name"], spec, operations, args.tag, ai, context, roles, SUITES_DIR
@@ -161,26 +210,172 @@ def cmd_generate(args):
     return 0 if metadata["counts"]["valid"] else 1
 
 
+def generate_pytest(config, spec, operations, tags, ai, context, roles):
+    try:
+        directory, metadata = generate_pytest_suite(
+            config["name"], spec, operations, tags, ai, context, roles, SUITES_DIR
+        )
+    except AIError as exc:
+        raise Failure(f"AI error: {exc}.", 1) from exc
+    counts, usage = metadata["counts"], metadata["ai_usage"]
+    print(
+        f"Saved suite {metadata['suite_id']}: {counts['files_saved']} Pytest files "
+        f"({counts['files_rejected']} rejected), {counts['files_that_run']} files and "
+        f"{counts['tests_collected']} tests that Pytest can collect"
+    )
+    cost = f"${usage['cost_usd']:.2f}" if usage.get("cost_usd") is not None else "unknown cost"
+    print(
+        f"AI model {metadata['model']}: {usage['calls']} calls, {usage['input_tokens']} input "
+        f"and {usage['output_tokens']} output tokens, {cost}, {metadata['generation_seconds']} s"
+    )
+    if metadata.get("stopped_reason"):
+        print(f"Generation stopped early: {metadata['stopped_reason']}")
+    print(f"\nSaved to {directory}\nRun with: python -m pytest {directory / 'pytest'}")
+    return 0 if counts["files_that_run"] else 1
+
+
 def cmd_run(args):
     config = load_app(args.app)
+    if args.docker:
+        return run_docker(config, args)
     try:
         suite_dir, metadata, tests = load_suite(SUITES_DIR, config["name"], args.suite)
         # The suite's own snapshot describes the operations that its tests were written for.
         snapshot = load_spec(str(suite_dir / "openapi.yaml"), config["timeouts"]["request_seconds"])
         operations = extract_operations(snapshot.document)
-        _, run, results = run_suite(
-            config, metadata, tests, operations, RUNS_DIR, args.label, reset=not args.no_reset
+        directory, run, results = run_suite(
+            config,
+            metadata,
+            tests,
+            operations,
+            RUNS_DIR,
+            args.label,
+            reset=not args.no_reset,
+            ai=classification_ai(config) if args.ai_classify else None,
         )
     except (RunError, SpecError) as exc:
         raise Failure(f"Run error: {exc}", 1) from exc
     print(format_run(run, results))
+    metrics = run_metrics(metadata, run, results, operations)
+    path = record_metrics(metrics)
+    print(
+        f"\nMetrics: endpoint coverage {_percent(metrics['endpoint_coverage'])}, "
+        f"executable tests {_percent(metrics['executable_test_rate'])}; saved to {path}"
+    )
+    if config.get("monitor"):
+        since = datetime.fromisoformat(run["started_at"])
+        try:
+            record, alerts = monitor_run(config, since, datetime.now(UTC), directory)
+        except MonitorError as exc:
+            print(f"\nSecurity monitor: {exc}", file=sys.stderr)
+        else:
+            print(f"\nSecurity monitor: {record['events']} log events, {len(alerts)} alerts")
+            print("\n".join("  " + line for line in format_alerts(alerts)))
     return 0 if run["outcomes"].get("passed", 0) == run["total"] else 1
+
+
+def _percent(rate):
+    return "n/a" if rate is None else f"{rate:.0%}"
+
+
+def classification_ai(config):
+    """The AI client for failures that no rule classifies; it uses the generation settings."""
+    if not (os.environ.get("ANTHROPIC_API_KEY") or os.environ.get("ANTHROPIC_AUTH_TOKEN")):
+        raise Failure("Configuration error: ANTHROPIC_API_KEY is not set.", 2)
+    settings = {**config.get("generation", {}), **config.get("classification", {})}
+    return AIClient(
+        settings.get("model", DEFAULT_MODEL),
+        settings.get("limits", {}),
+        effort=settings.get("effort", "low"),
+    )
+
+
+def cmd_validate(args):
+    if args.runs < 2:
+        raise Failure("Error: --runs must be 2 or more.", 2)
+    config = load_app(args.app)
+    try:
+        suite_dir, metadata, tests = load_suite(SUITES_DIR, config["name"], args.suite)
+        snapshot = load_spec(str(suite_dir / "openapi.yaml"), config["timeouts"]["request_seconds"])
+        operations = extract_operations(snapshot.document)
+        runs = []
+        for number in range(1, args.runs + 1):
+            # Each run starts from the same seed data (FR-08).
+            _, run, results = run_suite(
+                config, metadata, tests, operations, RUNS_DIR, f"validate-{number}"
+            )
+            print(f"Run {number} of {args.runs}: {run['run_id']}")
+            runs.append(results)
+        excluded = json.loads((suite_dir / "excluded.json").read_text(encoding="utf-8"))
+    except (RunError, SpecError) as exc:
+        raise Failure(f"Run error: {exc}", 1) from exc
+    except (OSError, json.JSONDecodeError) as exc:
+        raise Failure(f"Error: cannot read the excluded tests of {suite_dir}.", 2) from exc
+    report = validation_report(metadata, excluded, runs)
+    path = suite_dir / "validation.json"
+    path.write_text(json.dumps(report, indent=2) + "\n", encoding="utf-8")
+    print(format_validation(report))
+    print(f"\nSaved to {path}")
+    return 1 if report["flaky"] else 0
+
+
+def run_docker(config, args):
+    try:
+        suite_dir, _, tests = load_suite(SUITES_DIR, config["name"], args.suite)
+        if not (suite_dir / "pytest" / "conftest.py").exists():
+            build_pytest(suite_dir, tests)
+        directory, summary = run_in_docker(config, suite_dir, RUNS_DIR, args.label)
+    except RunError as exc:
+        raise Failure(f"Run error: {exc}", 1) from exc
+    outcomes = summary["outcomes"]
+    print(
+        f"Docker run {summary['run_id']}: suite {summary['suite']}, {summary['total']} tests, "
+        f"{summary['seconds']} s, no AI model used"
+    )
+    print("  ".join(f"{name} {outcomes.get(name, 0)}" for name in ("passed", "failed", "error")))
+    if summary["timed_out"]:
+        print("The run time limit stopped the container.")
+    print(f"Saved to {directory}")
+    return 0 if summary["total"] and outcomes.get("passed", 0) == summary["total"] else 1
+
+
+def cmd_build(args):
+    config = load_app(args.app)
+    try:
+        suite_dir, metadata, tests = load_suite(SUITES_DIR, config["name"], args.suite)
+    except RunError as exc:
+        raise Failure(f"Error: {exc}", 2) from exc
+    paths = build_pytest(suite_dir, tests)
+    result = {"files_written": len(paths), "tests_written": len(tests), **collect(paths[0].parent)}
+    metadata["pytest_build"] = result
+    (suite_dir / "suite.json").write_text(json.dumps(metadata, indent=2) + "\n", "utf-8")
+    print(
+        f"Wrote {len(tests)} tests in {len(paths)} files to {suite_dir / 'pytest'}. "
+        f"Pytest collects {result['tests_collected']} tests in {result['files_collected']} files."
+    )
+    print(f"Run them with: python -m pytest {suite_dir / 'pytest'}")
+    return 0 if result["collect_exit_code"] == 0 else 1
 
 
 def cmd_report(args):
     config = load_app(args.app)
     run, results = read_run(config["name"], args.run)
+    directory = Path(RUNS_DIR) / config["name"] / run["run_id"]
+    try:
+        alerts = json.loads((directory / "alerts.json").read_text(encoding="utf-8"))
+    except (OSError, json.JSONDecodeError):
+        alerts = None  # The security monitor did not run for this run.
     print(format_run(run, results))
+    print("\nSecurity alerts:")
+    if alerts is None:
+        print("  The security monitor did not run.")
+    else:
+        print("\n".join("  " + line for line in format_alerts(alerts)) or "  No alerts.")
+    if args.export:
+        report = build_report(run, results, alerts)
+        (directory / "report.md").write_text(report_markdown(report), encoding="utf-8")
+        (directory / "report.json").write_text(report_json(report), encoding="utf-8")
+        print(f"\nSaved {directory / 'report.md'} and {directory / 'report.json'}")
     return 0
 
 
@@ -322,6 +517,8 @@ COMMANDS = {
     "spec": cmd_spec,
     "generate": cmd_generate,
     "run": cmd_run,
+    "validate": cmd_validate,
+    "build": cmd_build,
     "report": cmd_report,
     "compare": cmd_compare,
     "baseline": cmd_baseline,

@@ -46,5 +46,12 @@
     "cost_usd": 0.4133
   },
   "spec_sha256": "b4aacb45eeb4872f4d61c42ca0202df289d16b9f31f70375750a9a4d7f6d4199",
-  "stopped_reason": null
+  "stopped_reason": null,
+  "pytest_build": {
+    "files_written": 4,
+    "tests_written": 118,
+    "files_collected": 4,
+    "tests_collected": 118,
+    "collect_exit_code": 0
+  }
 }

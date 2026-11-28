@@ -23,3 +23,8 @@ auth:
 reset:
   command: [docker, compose, -f, apps/banking/compose.yaml, run, --rm, reset]
 
+
+# Security monitoring (FR-11): the logs of the API container and the rules to apply.
+monitor:
+  logs_command: [docker, compose, -f, apps/banking/compose.yaml, logs, --no-color, --no-log-prefix, api]
+  rules: configs/monitor/rules.yaml

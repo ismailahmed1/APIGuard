@@ -90,6 +90,19 @@ def select_operations(operations, tags):
     return [op for op in operations if wanted & {tag.lower() for tag in op.tags}]
 
 
+def group_operations(selected, tags):
+    """Group the operations by their first selected tag; each group is one model request."""
+    groups = {}
+    for operation in selected:
+        group = next((t for t in operation.tags if not tags or t.lower() in _lower(tags)), "other")
+        groups.setdefault(group, []).append(operation)
+    return groups
+
+
+def group_prefix(group):
+    return re.sub(r"[^a-z0-9]+", "-", group.lower()).strip("-") + "-"
+
+
 def describe_operation(operation):
     """A compact description of an operation for the prompt."""
     body = None
@@ -115,20 +128,17 @@ def describe_operation(operation):
 def generate_suite(app_name, spec, operations, tags, ai, context, roles, suites_dir):
     """Generate, validate and save a suite. Returns (suite directory, suite metadata)."""
     selected = select_operations(operations, tags)
-    groups = {}
-    for operation in selected:
-        group = next((t for t in operation.tags if not tags or t.lower() in _lower(tags)), "other")
-        groups.setdefault(group, []).append(operation)
+    groups = group_operations(selected, tags)
 
     system = SYSTEM_PROMPT + "\n\nApplication context:\n" + context.strip()
     system += f"\n\nRoles: {', '.join(roles)} (or {ANONYMOUS})."
     raw_tests, stopped_reason = [], None
     start = time.monotonic()
-    for group, group_operations in groups.items():
-        prefix = re.sub(r"[^a-z0-9]+", "-", group.lower()).strip("-") + "-"
+    for group, members in groups.items():
+        prefix = group_prefix(group)
         prompt = (
             f"Write tests for these {group} operations. Start every test id with '{prefix}'.\n\n"
-            + json.dumps([describe_operation(op) for op in group_operations], indent=1)
+            + json.dumps([describe_operation(op) for op in members], indent=1)
         )
         try:
             answer = ai.generate_json(system, prompt, TEST_SCHEMA)

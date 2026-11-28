@@ -21,7 +21,13 @@ APIGuard currently supports:
 - Reporting configuration and connection errors with meaningful exit codes.
 - Summarizing every operation in the specification with `apiguard spec`.
 - Generating test suites with Claude, validating them and saving them with `apiguard generate`.
+- Generating Pytest files directly with Claude (Method A) with `apiguard generate <app> --method pytest`. The files use the shared `api` fixture. APIGuard rejects files with syntax errors or other imports, and records the generation time, tokens and the number of files that run.
 - Running saved suites without the AI model with `apiguard run`, and reading results with `apiguard report`.
+- Classifying each failure into one FR-10 category with fixed rules. `apiguard run --ai-classify` sends only the failures that no rule classifies to the AI model, after secrets are removed.
+- Showing one report with the totals, the failures by category and the security alerts. `apiguard report <app> --run <run-id> --export` also saves it as `report.md` and `report.json` in the run directory.
+- Recording the evaluation metrics of each run in `eval/metrics/<app>.jsonl`: generation time, run time, requests, AI calls, tokens, cost, endpoint coverage and executable-test rate.
+- Running a saved suite more than one time with `apiguard validate <app> --runs N`. It flags tests with different results and saves the saved, rejected and flaky tests in `validation.json` in the suite directory.
+- Converting a saved suite to Pytest files with `apiguard build`. See [docs/test-definitions.md](docs/test-definitions.md) for the test-definition schema.
 - Comparing two runs with `apiguard compare`, and running a Schemathesis baseline with `apiguard baseline`.
 - Evaluating fault detection against seeded NexStock faults with `scripts/evaluate_faults.py`.
 
@@ -132,6 +138,20 @@ The container starts NexStock through `apps/nexstock/apiguard_logging.py`. This 
 
 `event` is `request`, `login_success` or `login_failure`. `user` and `role` come from a valid token. A login line gives the email address as `user`. The lines contain no passwords and no tokens. Show them with `docker compose -f apps/nexstock/compose.yaml logs api`.
 
+### Security monitoring
+
+After each `apiguard run`, APIGuard reads the API container logs for the run time. It applies the rules in `configs/monitor/rules.yaml` and saves the matches in `monitor.json` and the alerts in `alerts.json` in the run directory. Each alert has the rule, app, time, severity and up to 20 log lines, with secrets removed. Repeated matches of one rule in one time window make one alert. A rule matches when a number of events with the given fields occur in a time window.
+
+Check the rules against live NexStock with known normal and suspicious requests:
+
+```powershell
+.\.venv\Scripts\python.exe scripts/make_security_events.py
+```
+
+Each suspicious step must trigger its rule. The normal step must trigger no rule.
+### Run a suite in Docker
+
+`apiguard run nexstock --docker` runs the suite's Pytest files in a container on the NexStock Compose network. It builds the `apiguard-runner:local` image from `docker/runner/Dockerfile`, resets the data and runs Pytest. The container gets the role credentials and no AI key. The request and run time limits come from the configuration. The JUnit report and `summary.json` are saved in `runs/nexstock/docker-<time>/`. The `docker_run` settings in `configs/nexstock.yaml` give the network, the address and the reset command in the container.
 ## Run the FastAPI Banking System in Docker
 
 From the APIGuard repository root:
