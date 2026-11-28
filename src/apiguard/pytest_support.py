@@ -16,7 +16,7 @@ from apiguard.config import load_config
 from apiguard.openapi import load_spec
 from apiguard.operations import extract_operations
 from apiguard.runner import _run_test, _Session
-from apiguard.validator import MUTATING_METHODS
+from apiguard.validator import ANONYMOUS, MUTATING_METHODS
 
 
 class Api:
@@ -66,6 +66,25 @@ class Api:
         if result["outcome"] != "passed":
             pytest.fail(f"{result['category']}: {result['detail']}", pytrace=False)
         return result
+
+    def request(self, role, method, path, params=None, json=None):
+        """Send a request as a role ("anonymous" for no token) and return the httpx response.
+
+        Placeholders such as {{admin.password}} in the values are filled with credentials.
+        """
+        if self.reset and self.dirty and method in MUTATING_METHODS:
+            self.session.reset()
+        self.dirty = self.dirty or method in MUTATING_METHODS
+        headers = {}
+        if role != ANONYMOUS:
+            headers["Authorization"] = f"Bearer {self.session.token(role)}"
+        return self.client.request(
+            method,
+            self.session.fill(path),
+            params=self.session.fill(params or {}),
+            json=self.session.fill(json),
+            headers=headers,
+        )
 
     def close(self):
         self.client.close()

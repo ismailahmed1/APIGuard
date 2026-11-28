@@ -21,6 +21,7 @@ APIGuard currently supports:
 - Reporting configuration and connection errors with meaningful exit codes.
 - Summarizing every operation in the specification with `apiguard spec`.
 - Generating test suites with Claude, validating them and saving them with `apiguard generate`.
+- Generating Pytest files directly with Claude (Method A) with `apiguard generate <app> --method pytest`. The files use the shared `api` fixture. APIGuard rejects files with syntax errors or other imports, and records the generation time, tokens and the number of files that run.
 - Running saved suites without the AI model with `apiguard run`, and reading results with `apiguard report`.
 - Classifying each failure into one FR-10 category with fixed rules. `apiguard run --ai-classify` sends only the failures that no rule classifies to the AI model, after secrets are removed.
 - Showing one report with the totals, the failures by category and the security alerts. `apiguard report <app> --run <run-id> --export` also saves it as `report.md` and `report.json` in the run directory.
