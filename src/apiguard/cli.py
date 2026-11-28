@@ -3,6 +3,7 @@ import json
 import os
 import re
 import sys
+from datetime import UTC, datetime
 from pathlib import Path
 
 import httpx
@@ -13,6 +14,7 @@ from apiguard.ai import AIClient, AIError
 from apiguard.baseline import BaselineError, compare_baselines, run_baseline
 from apiguard.config import ConfigError, load_config
 from apiguard.generator import generate_suite
+from apiguard.monitor import MonitorError, monitor_run
 from apiguard.openapi import SpecError, get_response, load_spec
 from apiguard.operations import extract_operations
 from apiguard.reporting import compare_runs, format_run, format_suite, table
@@ -173,7 +175,7 @@ def cmd_run(args):
         # The suite's own snapshot describes the operations that its tests were written for.
         snapshot = load_spec(str(suite_dir / "openapi.yaml"), config["timeouts"]["request_seconds"])
         operations = extract_operations(snapshot.document)
-        _, run, results = run_suite(
+        directory, run, results = run_suite(
             config,
             metadata,
             tests,
@@ -186,6 +188,15 @@ def cmd_run(args):
     except (RunError, SpecError) as exc:
         raise Failure(f"Run error: {exc}", 1) from exc
     print(format_run(run, results))
+    if config.get("monitor"):
+        since = datetime.fromisoformat(run["started_at"])
+        try:
+            record, _ = monitor_run(config, since, datetime.now(UTC), directory)
+        except MonitorError as exc:
+            print(f"\nSecurity monitor: {exc}", file=sys.stderr)
+        else:
+            rules = ", ".join(sorted({m["rule"] for m in record["matches"]})) or "none"
+            print(f"\nSecurity monitor: {record['events']} log events, rules matched: {rules}")
     return 0 if run["outcomes"].get("passed", 0) == run["total"] else 1
 
 
