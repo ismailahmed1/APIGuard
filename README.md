@@ -132,6 +132,18 @@ The container starts NexStock through `apps/nexstock/apiguard_logging.py`. This 
 
 `event` is `request`, `login_success` or `login_failure`. `user` and `role` come from a valid token. A login line gives the email address as `user`. The lines contain no passwords and no tokens. Show them with `docker compose -f apps/nexstock/compose.yaml logs api`.
 
+### Security monitoring
+
+After each `apiguard run`, APIGuard reads the API container logs for the run time. It applies the rules in `configs/monitor/rules.yaml` and saves the matches in `monitor.json` in the run directory. A rule matches when a number of events with the given fields occur in a time window.
+
+Check the rules against live NexStock with known normal and suspicious requests:
+
+```powershell
+.\.venv\Scripts\python.exe scripts/make_security_events.py
+```
+
+Each suspicious step must trigger its rule. The normal step must trigger no rule.
+
 NexStock v1 has known defects, which APIGuard should detect: `GET /api/auth/me` and `GET /api/inventory` return HTTP 500 for every authenticated request.
 
 ## Check NexStock Connectivity
