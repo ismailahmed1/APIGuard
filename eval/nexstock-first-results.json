@@ -1,42 +1,69 @@
 {
   "issue": 15,
-  "status": "blocked",
-  "attempted_at": "2026-11-27T23:36:28+00:00",
-  "command": ".venv/bin/python -m apiguard.cli baseline nexstock --label original",
-  "command_exit_code": 1,
-  "attempt_seconds": 3.25,
-  "baseline_seconds": null,
-  "blocker": "Docker Desktop Linux engine is unreachable at npipe:////./pipe/dockerDesktopLinuxEngine. The configured database reset exited 1 before login or Schemathesis execution. The same Docker daemon check failed outside the sandbox; /var/run/docker.sock is absent.",
+  "status": "completed_with_findings_and_stateful_error",
+  "run_id": "baseline-20261127-234654",
+  "started_at": "2026-11-27T23:46:54+00:00",
+  "reproduction_command": "python -m apiguard.cli baseline nexstock --label original",
+  "label": "original",
+  "baseline_seconds": 31.5,
+  "schemathesis_reported_seconds": 14.99,
+  "junit_suite_seconds": 14.104531,
+  "timing_note": "The 31.5-second Docker subprocess includes the first Schemathesis image pull. The tool console reports 14.99 seconds; JUnit records its own suite time. Reset and initial login precede these timings.",
+  "schemathesis_exit_code": 1,
   "app": {
     "name": "nexstock",
-    "configured_upstream_commit": "616e053ebda66294f5d3532dae4b3d752acc6cb0",
-    "reference_spec_version": "1.0.0",
-    "runtime_version": null,
-    "fault_free_verified": false,
-    "rebuilt": false
+    "upstream_commit": "616e053ebda66294f5d3532dae4b3d752acc6cb0",
+    "runtime_version": "1.0.0",
+    "openapi_version": "3.1.0",
+    "fault_free_verified": true,
+    "evidence": {
+      "api_image": "apiguard-nexstock-api:original",
+      "api_image_id": "sha256:a02894371ab843fba66b577d978b32aefcf81281a8cfbd2065c86bbb17dfdeea",
+      "api_image_created_at": "2026-11-24T20:58:38.998476998Z",
+      "api_container_id": "14b1f21906f981a975efbe842aaf1b53efd1c671de04f2d34aa5f95864986045",
+      "api_container_created_at": "2026-11-27T23:46:11.491419571Z",
+      "api_container_started_at": "2026-11-27T23:46:15.404523132Z",
+      "api_container_restart_count": 0,
+      "build_history": "ADD uses the pinned NexStock upstream SHA; the patch RUN layer records NEXSTOCK_FAULT= with an empty value, so no fault patch is applied.",
+      "rebuild_log_available": false,
+      "verification_note": "Read-only inspection after the run found this original image in the container started before the run. Image history establishes the empty fault argument independently of the original tag; no fresh no-cache rebuild is claimed."
+    }
   },
   "versions": {
     "apiguard": "0.1.0",
     "host_python": "3.14.4",
     "docker_cli": "29.9.3",
     "docker_compose": "5.7.0",
-    "docker_server": null,
-    "configured_schemathesis_image": "schemathesis/schemathesis:4.33.4",
-    "schemathesis_runtime": null,
-    "configured_postgresql_image": "postgres:16.4-alpine",
-    "postgresql_runtime": null,
-    "fastapi_runtime": null
+    "docker_server": "29.9.3",
+    "schemathesis_image": "schemathesis/schemathesis:4.33.4",
+    "schemathesis_runtime": "4.33.4",
+    "schemathesis_image_digest_from_output": "sha256:708d934c8208a8f785bdf1b1610476e691f1efda0b7a3cb9ce7536d0f3280eec",
+    "postgresql_image": "postgres:16.4-alpine",
+    "postgresql_runtime": "16.4",
+    "app_python": "3.11.18",
+    "fastapi_runtime": "0.163.1",
+    "evidence_note": "Schemathesis version and image digest are in output.txt. App and database runtime versions and Docker server were inspected after the run; host/CLI versions match the earlier environment record."
   },
+  "environment_verified_at": "2026-11-27T23:55:29+00:00",
   "authentication": {
     "role": "admin",
     "email_variable": "NEXSTOCK_ADMIN_EMAIL",
     "password_variable": "NEXSTOCK_ADMIN_PASSWORD",
     "required_variables_present": true,
-    "login_attempted": false,
-    "login_verified": false
+    "login_attempted": true,
+    "login_verified": true,
+    "evidence": "The existing CLI aborts unless reset and admin login succeed before run_baseline is called. The generated POST /api/auth/login cases returning 401 are distinct from that initial credential exchange."
   },
   "configured_settings": {
-    "reset_command": ["docker", "compose", "-f", "apps/nexstock/compose.yaml", "run", "--rm", "reset"],
+    "reset_command": [
+      "docker",
+      "compose",
+      "-f",
+      "apps/nexstock/compose.yaml",
+      "run",
+      "--rm",
+      "reset"
+    ],
     "seed_data": "apps/nexstock/seed.sql",
     "reset_before_baseline": true,
     "reset_between_cases": false,
@@ -51,45 +78,188 @@
     "tags": []
   },
   "endpoint_scope": {
-    "planned_selection": "All operations in the served specification; no --tag filter",
-    "reference_snapshot": "suites/nexstock/20261117-001643/openapi.yaml",
-    "reference_operations": 28,
-    "reference_authenticated_operations": 26,
-    "planned_operations_from_reference": [
-      "GET /",
-      "GET /api/categories",
+    "selection": "All operations in the served specification; no --tag filter",
+    "spec_url": "http://api:8000/openapi.json",
+    "api_operations_selected": 28,
+    "api_operations_tested": 28,
+    "api_operations_with_findings": 21,
+    "api_operations_without_findings": 7,
+    "junit_groups": 29,
+    "counting_note": "The raw summary operations_tested value of 29 counts 28 API method/path operations plus the Stateful tests group. It does not mean 29 distinct API endpoints.",
+    "actual_tested_operations": [
+      "POST /api/auth/login",
       "POST /api/categories",
-      "GET /api/categories/{category_id}",
-      "PUT /api/categories/{category_id}",
-      "DELETE /api/categories/{category_id}",
-      "GET /api/products",
-      "POST /api/products",
-      "GET /api/products/{product_id}",
-      "PUT /api/products/{product_id}",
-      "DELETE /api/products/{product_id}",
-      "GET /api/inventory",
-      "GET /api/inventory/movements",
-      "GET /api/inventory/{product_id}",
-      "POST /api/inventory/stock-in",
-      "POST /api/inventory/stock-out",
-      "GET /api/dashboard/stats",
+      "GET /",
+      "GET /api/auth/me",
+      "GET /api/categories",
       "GET /api/dashboard/inventory-trend",
       "GET /api/dashboard/low-stock",
       "GET /api/dashboard/recent-activity",
-      "GET /api/reports/inventory",
-      "GET /api/reports/stock-movements",
+      "GET /api/dashboard/stats",
+      "GET /api/inventory",
+      "GET /api/reports/export/low-stock",
       "GET /api/reports/low-stock",
+      "POST /api/inventory/stock-in",
+      "POST /api/inventory/stock-out",
+      "POST /api/products",
+      "PUT /api/categories/{category_id}",
+      "PUT /api/products/{product_id}",
+      "GET /api/categories/{category_id}",
+      "GET /api/inventory/movements",
+      "GET /api/inventory/{product_id}",
+      "GET /api/products",
+      "GET /api/products/{product_id}",
       "GET /api/reports/export/inventory",
       "GET /api/reports/export/stock-movements",
-      "GET /api/reports/export/low-stock",
-      "POST /api/auth/login",
-      "GET /api/auth/me"
-    ],
-    "operations_tested": 0,
-    "actual_tested_operations": []
+      "GET /api/reports/inventory",
+      "GET /api/reports/stock-movements",
+      "DELETE /api/categories/{category_id}",
+      "DELETE /api/products/{product_id}"
+    ]
   },
-  "findings": null,
-  "report_directory": null,
-  "expected_report_pattern": "runs/nexstock/baseline-<UTC YYYYMMDD-HHMMSS>/{summary.json,output.txt,junit.xml}",
-  "conclusion": "No baseline findings are available. Docker must become reachable, the original app must be explicitly rebuilt and recreated, and authentication must succeed before this issue's execution requirements can be completed."
+  "tool_reported_totals": {
+    "generated_test_cases": 696,
+    "test_cases_with_failures": 34,
+    "unique_check_failures": 45,
+    "execution_errors": 1,
+    "warnings": 1,
+    "check_failures": {
+      "ST101 Server error": 11,
+      "ST103 Undocumented status code": 21,
+      "ST105 Undocumented Content-Type": 3,
+      "ST201 Schema-violating request accepted": 1,
+      "ST202 Schema-valid request rejected": 3,
+      "ST205 Allow header mismatch": 6
+    },
+    "counting_note": "These are console totals across phases, including stateful scenarios. They are not counts of affected endpoints and must not be added to the operation-level summary counts."
+  },
+  "api_findings": {
+    "POST /api/auth/login": [
+      "ST103 Undocumented status code (received 401)"
+    ],
+    "POST /api/categories": [
+      "ST103 Undocumented status code (received 400)",
+      "ST205 Allow header mismatch"
+    ],
+    "GET /": [],
+    "GET /api/auth/me": [
+      "ST101 Server error",
+      "ST103 Undocumented status code (received 500)"
+    ],
+    "GET /api/categories": [],
+    "GET /api/dashboard/inventory-trend": [
+      "ST101 Server error",
+      "ST103 Undocumented status code (received 500)"
+    ],
+    "GET /api/dashboard/low-stock": [],
+    "GET /api/dashboard/recent-activity": [
+      "ST101 Server error",
+      "ST103 Undocumented status code (received 500)"
+    ],
+    "GET /api/dashboard/stats": [],
+    "GET /api/inventory": [
+      "ST101 Server error",
+      "ST103 Undocumented status code (received 500)"
+    ],
+    "GET /api/reports/export/low-stock": [
+      "ST105 Undocumented Content-Type (received text/csv;)"
+    ],
+    "GET /api/reports/low-stock": [],
+    "POST /api/inventory/stock-in": [
+      "ST101 Server error",
+      "ST103 Undocumented status code (received 500)",
+      "ST205 Allow header mismatch"
+    ],
+    "POST /api/inventory/stock-out": [
+      "ST101 Server error",
+      "ST103 Undocumented status code (received 500)",
+      "ST205 Allow header mismatch"
+    ],
+    "POST /api/products": [
+      "ST202 Schema-valid request rejected",
+      "ST205 Allow header mismatch"
+    ],
+    "PUT /api/categories/{category_id}": [
+      "ST103 Undocumented status code (received 404)",
+      "ST205 Allow header mismatch"
+    ],
+    "PUT /api/products/{product_id}": [
+      "ST103 Undocumented status code (received 404)",
+      "ST205 Allow header mismatch"
+    ],
+    "GET /api/categories/{category_id}": [
+      "ST103 Undocumented status code (received 404)"
+    ],
+    "GET /api/inventory/movements": [
+      "ST201 Schema-violating request accepted"
+    ],
+    "GET /api/inventory/{product_id}": [
+      "ST101 Server error",
+      "ST103 Undocumented status code (received 404)",
+      "ST103 Undocumented status code (received 500)"
+    ],
+    "GET /api/products": [],
+    "GET /api/products/{product_id}": [
+      "ST103 Undocumented status code (received 404)"
+    ],
+    "GET /api/reports/export/inventory": [
+      "ST105 Undocumented Content-Type (received text/csv;)"
+    ],
+    "GET /api/reports/export/stock-movements": [
+      "ST105 Undocumented Content-Type (received text/csv;)"
+    ],
+    "GET /api/reports/inventory": [],
+    "GET /api/reports/stock-movements": [
+      "ST101 Server error",
+      "ST103 Undocumented status code (received 500)"
+    ],
+    "DELETE /api/categories/{category_id}": [
+      "ST101 Server error",
+      "ST103 Undocumented status code (received 404)",
+      "ST103 Undocumented status code (received 500)"
+    ],
+    "DELETE /api/products/{product_id}": [
+      "ST103 Undocumented status code (received 404)"
+    ]
+  },
+  "stateful": {
+    "group": "Stateful tests",
+    "scenarios": {
+      "total": 105,
+      "passed": 86,
+      "failed": 18,
+      "errored": 1
+    },
+    "api_links": {
+      "covered": 0,
+      "selected": 79,
+      "inferred": 79
+    },
+    "check_findings": [
+      "ST101 Server error",
+      "ST103 Undocumented status code (received 400)",
+      "ST103 Undocumented status code (received 500)",
+      "ST202 Schema-valid request rejected"
+    ],
+    "execution_error": {
+      "category": "Network Error",
+      "classification": "server-side streaming response interrupted; reported as a transport/execution error",
+      "operation": "GET /api/reports/export/stock-movements",
+      "message": "Connection broken. The server declared chunked encoding but sent an invalid chunk. Response ended prematurely.",
+      "cause": "An invalid movement type reaches MovementType(movement_type) and raises ValueError while export_movements_csv is being iterated by StreamingResponse. The stream terminates before a complete response body is delivered.",
+      "evidence": "JUnit error element and console ERRORS section identify the export request. The corresponding API traceback at 2026-11-27T23:47:25.133Z points to app/services/report_service.py:140 and :60 and reports an invalid MovementType. Read-only inspection confirms the conversion occurs inside the streaming generator.",
+      "interpretation": "This is separate from ordinary status/schema check failures. It indicates an app streaming exception, not evidence of a Docker outage. Stateful execution includes an errored scenario and zero covered links, so complete workflow coverage is not established."
+    }
+  },
+  "warnings": [
+    "Generated POST /api/auth/login cases returned only 401/403 (401 observed), producing the authentication warning. This does not imply that the initial configured admin login failed."
+  ],
+  "report_directory": "runs/nexstock/baseline-20261127-234654",
+  "reports": {
+    "summary.json": "runs/nexstock/baseline-20261127-234654/summary.json",
+    "output.txt": "runs/nexstock/baseline-20261127-234654/output.txt",
+    "junit.xml": "runs/nexstock/baseline-20261127-234654/junit.xml"
+  },
+  "report_retention": "Raw reports remain under git-ignored runs/; only this sanitized summary is tracked. The console also mentions schema-coverage.html inside the removed tool container; it is not a retained host report.",
+  "conclusion": "The authenticated original-app baseline produced reports for 28 API operations, with findings on 21 and none on seven. It reported 45 check failures and one stateful streaming error. These are original-app observations, not seeded-fault detection results; comparisons remain Issue #27."
 }

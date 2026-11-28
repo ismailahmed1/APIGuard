@@ -206,8 +206,10 @@ A suite is saved in `suites/nexstock/<suite-id>/` with a snapshot of the specifi
 ### Seeded faults and the Schemathesis baseline
 
 For the standalone NexStock baseline, follow [the setup and exact commands in eval/](eval/README.md).
-The [first-attempt summary](eval/nexstock-first-results.json) records the current
-Docker blocker; no baseline findings have been produced for Issue #15 yet.
+The [first-results summary](eval/nexstock-first-results.json) records the authenticated
+original-app run: 28 API operations tested, 45 reported check failures and one
+stateful streaming error. The 29 JUnit groups include `Stateful tests`; they do
+not represent 29 distinct API endpoints.
 
 `apps/nexstock/faults/` contains three patches, each with one fault. Start NexStock with one of them, run the same suite, and compare the run with the run on the original app. `compare` accepts run IDs or labels:
 
