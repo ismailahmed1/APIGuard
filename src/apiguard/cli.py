@@ -13,6 +13,7 @@ from apiguard.ai import AIClient, AIError
 from apiguard.baseline import BaselineError, compare_baselines, run_baseline
 from apiguard.config import ConfigError, load_config
 from apiguard.generator import generate_suite
+from apiguard.metrics import record_metrics, run_metrics
 from apiguard.openapi import SpecError, get_response, load_spec
 from apiguard.operations import extract_operations
 from apiguard.reporting import compare_runs, format_run, format_suite, table
@@ -174,7 +175,17 @@ def cmd_run(args):
     except (RunError, SpecError) as exc:
         raise Failure(f"Run error: {exc}", 1) from exc
     print(format_run(run, results))
+    metrics = run_metrics(metadata, run, results, operations)
+    path = record_metrics(metrics)
+    print(
+        f"\nMetrics: endpoint coverage {_percent(metrics['endpoint_coverage'])}, "
+        f"executable tests {_percent(metrics['executable_test_rate'])}; saved to {path}"
+    )
     return 0 if run["outcomes"].get("passed", 0) == run["total"] else 1
+
+
+def _percent(rate):
+    return "n/a" if rate is None else f"{rate:.0%}"
 
 
 def cmd_report(args):
