@@ -3,6 +3,7 @@ import json
 import os
 import re
 import sys
+from datetime import UTC, datetime
 from pathlib import Path
 
 import httpx
@@ -15,10 +16,23 @@ from apiguard.builder import build_pytest, collect
 from apiguard.config import ConfigError, load_config
 from apiguard.docker_run import run_in_docker
 from apiguard.generator import generate_suite
+from apiguard.metrics import record_metrics, run_metrics
+from apiguard.monitor import MonitorError, monitor_run
 from apiguard.openapi import SpecError, get_response, load_spec
 from apiguard.operations import extract_operations
-from apiguard.reporting import compare_runs, format_run, format_suite, table
+from apiguard.reporting import (
+    build_report,
+    compare_runs,
+    format_alerts,
+    format_run,
+    format_suite,
+    format_validation,
+    report_json,
+    report_markdown,
+    table,
+)
 from apiguard.runner import RunError, get_token, load_suite, reset_app, run_suite
+from apiguard.stability import validation_report
 
 MEDIA_LABELS = {
     "application/json": "json",
@@ -57,6 +71,17 @@ def main(argv=None):
     run.add_argument("--label", help="Label for this run, such as a seeded fault ID.")
     run.add_argument("--no-reset", action="store_true", help="Do not reset the test data.")
     run.add_argument(
+        "--ai-classify",
+        action="store_true",
+        help="Send failures that no rule classifies to the AI model.",
+    )
+
+    validate = command(
+        "validate", "Run a saved suite more than one time and flag tests with different results."
+    )
+    validate.add_argument("--suite", help="Suite ID (default: the latest suite).")
+    validate.add_argument("--runs", type=int, default=3, help="Number of runs (default: 3).")
+    run.add_argument(
         "--docker",
         action="store_true",
         help="Run the suite's Pytest files in a container on the app's Docker network.",
@@ -65,6 +90,11 @@ def main(argv=None):
     build.add_argument("--suite", help="Suite ID (default: the latest suite).")
     report = command("report", "Show the report of a saved run.")
     report.add_argument("--run", help="Run ID (default: the latest run).")
+    report.add_argument(
+        "--export",
+        action="store_true",
+        help="Also save the report as report.md and report.json in the run directory.",
+    )
     compare = command("compare", "Find tests that pass in a base run and fail in another run.")
     compare.add_argument("base", help="Base run ID or label, usually the original app.")
     compare.add_argument("other", help="Run ID or label to compare, usually a seeded fault.")
@@ -179,13 +209,80 @@ def cmd_run(args):
         # The suite's own snapshot describes the operations that its tests were written for.
         snapshot = load_spec(str(suite_dir / "openapi.yaml"), config["timeouts"]["request_seconds"])
         operations = extract_operations(snapshot.document)
-        _, run, results = run_suite(
-            config, metadata, tests, operations, RUNS_DIR, args.label, reset=not args.no_reset
+        directory, run, results = run_suite(
+            config,
+            metadata,
+            tests,
+            operations,
+            RUNS_DIR,
+            args.label,
+            reset=not args.no_reset,
+            ai=classification_ai(config) if args.ai_classify else None,
         )
     except (RunError, SpecError) as exc:
         raise Failure(f"Run error: {exc}", 1) from exc
     print(format_run(run, results))
+    metrics = run_metrics(metadata, run, results, operations)
+    path = record_metrics(metrics)
+    print(
+        f"\nMetrics: endpoint coverage {_percent(metrics['endpoint_coverage'])}, "
+        f"executable tests {_percent(metrics['executable_test_rate'])}; saved to {path}"
+    )
+    if config.get("monitor"):
+        since = datetime.fromisoformat(run["started_at"])
+        try:
+            record, alerts = monitor_run(config, since, datetime.now(UTC), directory)
+        except MonitorError as exc:
+            print(f"\nSecurity monitor: {exc}", file=sys.stderr)
+        else:
+            print(f"\nSecurity monitor: {record['events']} log events, {len(alerts)} alerts")
+            print("\n".join("  " + line for line in format_alerts(alerts)))
     return 0 if run["outcomes"].get("passed", 0) == run["total"] else 1
+
+
+def _percent(rate):
+    return "n/a" if rate is None else f"{rate:.0%}"
+
+
+def classification_ai(config):
+    """The AI client for failures that no rule classifies; it uses the generation settings."""
+    if not (os.environ.get("ANTHROPIC_API_KEY") or os.environ.get("ANTHROPIC_AUTH_TOKEN")):
+        raise Failure("Configuration error: ANTHROPIC_API_KEY is not set.", 2)
+    settings = {**config.get("generation", {}), **config.get("classification", {})}
+    return AIClient(
+        settings.get("model", DEFAULT_MODEL),
+        settings.get("limits", {}),
+        effort=settings.get("effort", "low"),
+    )
+
+
+def cmd_validate(args):
+    if args.runs < 2:
+        raise Failure("Error: --runs must be 2 or more.", 2)
+    config = load_app(args.app)
+    try:
+        suite_dir, metadata, tests = load_suite(SUITES_DIR, config["name"], args.suite)
+        snapshot = load_spec(str(suite_dir / "openapi.yaml"), config["timeouts"]["request_seconds"])
+        operations = extract_operations(snapshot.document)
+        runs = []
+        for number in range(1, args.runs + 1):
+            # Each run starts from the same seed data (FR-08).
+            _, run, results = run_suite(
+                config, metadata, tests, operations, RUNS_DIR, f"validate-{number}"
+            )
+            print(f"Run {number} of {args.runs}: {run['run_id']}")
+            runs.append(results)
+        excluded = json.loads((suite_dir / "excluded.json").read_text(encoding="utf-8"))
+    except (RunError, SpecError) as exc:
+        raise Failure(f"Run error: {exc}", 1) from exc
+    except (OSError, json.JSONDecodeError) as exc:
+        raise Failure(f"Error: cannot read the excluded tests of {suite_dir}.", 2) from exc
+    report = validation_report(metadata, excluded, runs)
+    path = suite_dir / "validation.json"
+    path.write_text(json.dumps(report, indent=2) + "\n", encoding="utf-8")
+    print(format_validation(report))
+    print(f"\nSaved to {path}")
+    return 1 if report["flaky"] else 0
 
 
 def run_docker(config, args):
@@ -229,7 +326,22 @@ def cmd_build(args):
 def cmd_report(args):
     config = load_app(args.app)
     run, results = read_run(config["name"], args.run)
+    directory = Path(RUNS_DIR) / config["name"] / run["run_id"]
+    try:
+        alerts = json.loads((directory / "alerts.json").read_text(encoding="utf-8"))
+    except (OSError, json.JSONDecodeError):
+        alerts = None  # The security monitor did not run for this run.
     print(format_run(run, results))
+    print("\nSecurity alerts:")
+    if alerts is None:
+        print("  The security monitor did not run.")
+    else:
+        print("\n".join("  " + line for line in format_alerts(alerts)) or "  No alerts.")
+    if args.export:
+        report = build_report(run, results, alerts)
+        (directory / "report.md").write_text(report_markdown(report), encoding="utf-8")
+        (directory / "report.json").write_text(report_json(report), encoding="utf-8")
+        print(f"\nSaved {directory / 'report.md'} and {directory / 'report.json'}")
     return 0
 
 
@@ -371,6 +483,7 @@ COMMANDS = {
     "spec": cmd_spec,
     "generate": cmd_generate,
     "run": cmd_run,
+    "validate": cmd_validate,
     "build": cmd_build,
     "report": cmd_report,
     "compare": cmd_compare,

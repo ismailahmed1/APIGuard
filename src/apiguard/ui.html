@@ -93,8 +93,10 @@ tfoot td { border-bottom: 0; border-top: 1px solid var(--line-2); font-weight: 6
 .meter { height: 6px; background: var(--line); border-radius: 3px; overflow: hidden; min-width: 120px; }
 .meter span { display: block; height: 100%; background: var(--muted); }
 .meter.pass { background: var(--bad-bg); } .meter.pass span { background: var(--ok); }
-.cat-api_failure { color: var(--bad); }
-.cat-test_error, .cat-configuration_error, .cat-infrastructure_error { color: var(--warn); }
+.cat-unexpected_status, .cat-response_schema_mismatch, .cat-input_validation,
+.cat-auth_failure, .cat-business_logic { color: var(--bad); }
+.cat-generated_test_error, .cat-configuration_error, .cat-infrastructure_error,
+.cat-unclassified { color: var(--warn); }
 .yes { color: var(--ok); } .no { color: var(--bad); }
 .status-change { font: 12.5px var(--mono); white-space: nowrap; }
 .status-change s { color: var(--muted); }
@@ -245,8 +247,11 @@ const esc = (s) => String(s ?? "").replace(/[&<>"']/g, (c) =>
 const TYPES = {happy_path: "Happy path", schema_validation: "Schema validation",
   authentication: "Authentication", boundary_value: "Boundary value"};
 const typeName = (t) => TYPES[t] || t;
-const CATEGORY = {api_failure: "API failure", test_error: "Generated-test error",
-  configuration_error: "Configuration error", infrastructure_error: "Infrastructure error"};
+const CATEGORY = {unexpected_status: "Unexpected status code",
+  response_schema_mismatch: "Response-schema mismatch", input_validation: "Input-validation failure",
+  auth_failure: "Authentication or authorization failure", business_logic: "Business-logic or state failure",
+  generated_test_error: "Generated-test error", configuration_error: "Configuration error",
+  infrastructure_error: "Infrastructure error", unclassified: "Unclassified failure"};
 let state = null, selectedTags = null, polling = null, lastJobId = null;
 const ui = {suite: null, run: null, base: null, other: null};
 
