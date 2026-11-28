@@ -123,6 +123,16 @@ How the environment is made reproducible:
 
 The seeded Admin and Manager accounts are defined in NexStock's `backend/scripts/seed_users.py`. Put their email addresses and passwords in the environment variables listed in `.env.example`.
 
+### NexStock logs
+
+The container starts NexStock through `apps/nexstock/apiguard_logging.py`. This module writes one JSON line for each request, and one more line for each login:
+
+```json
+{"source": "apiguard", "event": "request", "time": "2026-11-28T00:18:06.764+00:00", "method": "GET", "path": "/api/products", "status": 200, "user": "1", "role": "Admin", "ip": "172.18.0.1"}
+```
+
+`event` is `request`, `login_success` or `login_failure`. `user` and `role` come from a valid token. A login line gives the email address as `user`. The lines contain no passwords and no tokens. Show them with `docker compose -f apps/nexstock/compose.yaml logs api`.
+
 NexStock v1 has known defects, which APIGuard should detect: `GET /api/auth/me` and `GET /api/inventory` return HTTP 500 for every authenticated request.
 
 ## Check NexStock Connectivity
