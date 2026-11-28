@@ -110,6 +110,22 @@ def _classified_by(result):
     )
 
 
+def format_validation(report):
+    lines = [
+        (
+            f"Suite {report['suite_id']} after {report['runs']} runs: {len(report['saved'])} saved, "
+            f"{len(report['rejected'])} rejected, {len(report['flaky'])} flaky"
+        )
+    ]
+    if report["rejected"]:
+        lines += ["", "Rejected tests:"]
+        lines += [f"  {item['id'] or '?'}: {item['reason']}" for item in report["rejected"]]
+    if report["flaky"]:
+        lines += ["", "Flaky tests (the result changed between runs):"]
+        lines += [f"  {item['id']}: {', '.join(item['outcomes'])}" for item in report["flaky"]]
+    return "\n".join(lines)
+
+
 def compare_runs(base, base_results, run, results):
     """Tests that pass in the base run and fail in the other run reveal a new fault."""
     before = {r["id"]: r for r in base_results}

@@ -378,3 +378,44 @@ def test_no_credential_in_any_saved_or_shown_output(server, monkeypatch, capsys)
     for text in (saved, capsys.readouterr().out):
         for secret in (PASSWORD, api_key, TOKEN):
             assert secret not in text
+
+
+def test_fr05_valid_malformed_and_flaky_tests(server):
+    """FR-05: save the valid test, exclude the malformed test, flag the flaky test."""
+    from apiguard.stability import validation_report
+    from apiguard.validator import validate_tests
+
+    def raw(test_id, method, body_json=""):
+        return {
+            "id": test_id,
+            "type": "happy_path",
+            "description": test_id,
+            "method": method,
+            "path": "/api/products",
+            "role": "admin",
+            "path_params": [],
+            "query_params": [],
+            "body_json": body_json,
+            "expected_status": 200 if method == "GET" else 201,
+        }
+
+    raw_tests = [raw("valid", "GET"), raw("malformed", "POST", '{"name": '), raw("flaky", "GET")]
+    tests, excluded = validate_tests(raw_tests, OPERATIONS, ["admin"])
+    calls = {"flaky": 0}
+
+    def unstable(request):
+        if request.url.path == "/api/auth/login":
+            return shop(request)
+        if request.url.params.get("n") == "flaky":
+            calls["flaky"] += 1
+            return httpx.Response(200 if calls["flaky"] % 2 else 503, json={"data": []})
+        return shop(request)
+
+    tests[1]["query_params"] = {"n": "flaky"}
+    server["handler"]["value"] = unstable
+    runs = [run(tests)[2], run(tests)[2]]
+    report = validation_report({"suite_id": "s1"}, excluded, runs)
+    assert report["saved"] == ["flaky", "valid"]
+    assert report["rejected"][0]["id"] == "malformed"
+    assert "not valid JSON" in report["rejected"][0]["reason"]
+    assert [item["id"] for item in report["flaky"]] == ["flaky"]

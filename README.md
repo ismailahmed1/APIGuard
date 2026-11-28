@@ -25,6 +25,7 @@ APIGuard currently supports:
 - Classifying each failure into one FR-10 category with fixed rules. `apiguard run --ai-classify` sends only the failures that no rule classifies to the AI model, after secrets are removed.
 - Showing one report with the totals, the failures by category and the security alerts. `apiguard report <app> --run <run-id> --export` also saves it as `report.md` and `report.json` in the run directory.
 - Recording the evaluation metrics of each run in `eval/metrics/<app>.jsonl`: generation time, run time, requests, AI calls, tokens, cost, endpoint coverage and executable-test rate.
+- Running a saved suite more than one time with `apiguard validate <app> --runs N`. It flags tests with different results and saves the saved, rejected and flaky tests in `validation.json` in the suite directory.
 - Comparing two runs with `apiguard compare`, and running a Schemathesis baseline with `apiguard baseline`.
 - Evaluating fault detection against seeded NexStock faults with `scripts/evaluate_faults.py`.
 

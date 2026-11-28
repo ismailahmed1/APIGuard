@@ -24,11 +24,13 @@ from apiguard.reporting import (
     format_alerts,
     format_run,
     format_suite,
+    format_validation,
     report_json,
     report_markdown,
     table,
 )
 from apiguard.runner import RunError, get_token, load_suite, reset_app, run_suite
+from apiguard.stability import validation_report
 
 MEDIA_LABELS = {
     "application/json": "json",
@@ -71,6 +73,12 @@ def main(argv=None):
         action="store_true",
         help="Send failures that no rule classifies to the AI model.",
     )
+
+    validate = command(
+        "validate", "Run a saved suite more than one time and flag tests with different results."
+    )
+    validate.add_argument("--suite", help="Suite ID (default: the latest suite).")
+    validate.add_argument("--runs", type=int, default=3, help="Number of runs (default: 3).")
     report = command("report", "Show the report of a saved run.")
     report.add_argument("--run", help="Run ID (default: the latest run).")
     report.add_argument(
@@ -237,6 +245,35 @@ def classification_ai(config):
     )
 
 
+def cmd_validate(args):
+    if args.runs < 2:
+        raise Failure("Error: --runs must be 2 or more.", 2)
+    config = load_app(args.app)
+    try:
+        suite_dir, metadata, tests = load_suite(SUITES_DIR, config["name"], args.suite)
+        snapshot = load_spec(str(suite_dir / "openapi.yaml"), config["timeouts"]["request_seconds"])
+        operations = extract_operations(snapshot.document)
+        runs = []
+        for number in range(1, args.runs + 1):
+            # Each run starts from the same seed data (FR-08).
+            _, run, results = run_suite(
+                config, metadata, tests, operations, RUNS_DIR, f"validate-{number}"
+            )
+            print(f"Run {number} of {args.runs}: {run['run_id']}")
+            runs.append(results)
+        excluded = json.loads((suite_dir / "excluded.json").read_text(encoding="utf-8"))
+    except (RunError, SpecError) as exc:
+        raise Failure(f"Run error: {exc}", 1) from exc
+    except (OSError, json.JSONDecodeError) as exc:
+        raise Failure(f"Error: cannot read the excluded tests of {suite_dir}.", 2) from exc
+    report = validation_report(metadata, excluded, runs)
+    path = suite_dir / "validation.json"
+    path.write_text(json.dumps(report, indent=2) + "\n", encoding="utf-8")
+    print(format_validation(report))
+    print(f"\nSaved to {path}")
+    return 1 if report["flaky"] else 0
+
+
 def cmd_report(args):
     config = load_app(args.app)
     run, results = read_run(config["name"], args.run)
@@ -397,6 +434,7 @@ COMMANDS = {
     "spec": cmd_spec,
     "generate": cmd_generate,
     "run": cmd_run,
+    "validate": cmd_validate,
     "report": cmd_report,
     "compare": cmd_compare,
     "baseline": cmd_baseline,
