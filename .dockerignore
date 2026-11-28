@@ -1,0 +1,8 @@
+.git
+.venv
+.env
+runs
+suites
+docs/demo
+apps/*/upstream
+**/__pycache__

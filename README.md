@@ -123,6 +123,10 @@ How the environment is made reproducible:
 
 The seeded Admin and Manager accounts are defined in NexStock's `backend/scripts/seed_users.py`. Put their email addresses and passwords in the environment variables listed in `.env.example`.
 
+### Run a suite in Docker
+
+`apiguard run nexstock --docker` runs the suite's Pytest files in a container on the NexStock Compose network. It builds the `apiguard-runner:local` image from `docker/runner/Dockerfile`, resets the data and runs Pytest. The container gets the role credentials and no AI key. The request and run time limits come from the configuration. The JUnit report and `summary.json` are saved in `runs/nexstock/docker-<time>/`. The `docker_run` settings in `configs/nexstock.yaml` give the network, the address and the reset command in the container.
+
 NexStock v1 has known defects, which APIGuard should detect: `GET /api/auth/me` and `GET /api/inventory` return HTTP 500 for every authenticated request.
 
 ## Check NexStock Connectivity
