@@ -74,6 +74,25 @@ def format_run(run, results):
     return "\n".join(lines)
 
 
+def format_alerts(alerts):
+    """One line for each security alert."""
+    if not alerts:
+        return []
+    rows = [("TIME", "SEVERITY", "RULE", "GROUP", "EVENTS")]
+    for alert in alerts:
+        group = f"{alert['group_by']}={alert['group']}" if alert.get("group_by") else "-"
+        rows.append(
+            (
+                alert["time"],
+                alert["severity"],
+                f"{alert['rule']} {alert['name']}",
+                group,
+                alert["event_count"],
+            )
+        )
+    return table(rows)
+
+
 def compare_runs(base, base_results, run, results):
     """Tests that pass in the base run and fail in the other run reveal a new fault."""
     before = {r["id"]: r for r in base_results}

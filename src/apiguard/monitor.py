@@ -1,6 +1,8 @@
 """Collect application logs and apply security rules to them (FR-11)."""
 
 import json
+import os
+import re
 import subprocess
 from datetime import datetime, timedelta
 from pathlib import Path
@@ -9,6 +11,9 @@ import yaml
 
 DEFAULT_RULES = "configs/monitor/rules.yaml"
 RULE_FIELDS = ("id", "name", "severity", "match", "threshold", "window_seconds")
+JWT = re.compile(r"eyJ[\w-]+\.[\w-]+\.[\w-]+")
+SECRET_VARIABLES = ("ANTHROPIC_API_KEY", "ANTHROPIC_AUTH_TOKEN")
+MAX_ALERT_LINES = 20
 
 
 class MonitorError(Exception):
@@ -113,12 +118,76 @@ def _stamp(moment):
     return moment.strftime("%Y-%m-%dT%H:%M:%SZ")
 
 
+def make_alerts(config, matches):
+    """Make one alert for each rule match (FR-12). Merge repeated matches of one rule and group.
+
+    A match that starts within the rule's window after the previous match ends joins its alert.
+    """
+    alerts = []
+    ordered = sorted(
+        matches, key=lambda m: (m["rule"]["id"], str(m["group"]), m["events"][0]["time"])
+    )
+    for match in ordered:
+        rule, events = match["rule"], match["events"]
+        last = alerts[-1] if alerts else None
+        if (
+            last
+            and last["rule"] == rule["id"]
+            and last["group"] == match["group"]
+            and _seconds(last["last_seen"], events[0]["time"]) <= rule["window_seconds"]
+        ):
+            last["matches"] += 1
+            last["event_count"] += len(events)
+            last["last_seen"] = events[-1]["time"]
+            last["log_lines"] = (last["log_lines"] + [e["line"] for e in events])[:MAX_ALERT_LINES]
+            continue
+        alerts.append(
+            {
+                "rule": rule["id"],
+                "name": rule["name"],
+                "app": config["name"],
+                "severity": rule["severity"],
+                "time": events[0]["time"],
+                "last_seen": events[-1]["time"],
+                "group_by": rule.get("group_by"),
+                "group": match["group"],
+                "matches": 1,
+                "event_count": len(events),
+                "log_lines": [e["line"] for e in events][:MAX_ALERT_LINES],
+            }
+        )
+    alerts.sort(key=lambda a: a["time"])
+    secrets = _secrets(config)
+    for alert in alerts:
+        alert["log_lines"] = [_redact(text, secrets) for text in alert["log_lines"]]
+    return alerts
+
+
+def _seconds(earlier, later):
+    return (datetime.fromisoformat(later) - datetime.fromisoformat(earlier)).total_seconds()
+
+
+def _secrets(config):
+    variables = list(SECRET_VARIABLES)
+    for settings in config.get("auth", {}).get("roles", {}).values():
+        variables.append(settings.get("password_env"))
+    return {value for value in (os.environ.get(name or "") for name in variables) if value}
+
+
+def _redact(text, secrets):
+    """Remove passwords, keys and tokens from a log line (NFR-04)."""
+    for secret in secrets:
+        text = text.replace(secret, "[REDACTED]")
+    return JWT.sub("[REDACTED-TOKEN]", text)
+
+
 def monitor_run(config, since, until, directory):
-    """Apply the rules to the logs of one run, and save the matches in monitor.json."""
+    """Apply the rules to the logs of one run. Save the matches and the alerts with the run."""
     settings = config.get("monitor", {})
     rules = load_rules(settings.get("rules", DEFAULT_RULES))
     events = parse_events(collect_logs(config, since, until), since, until)
     matches = apply_rules(events, rules)
+    alerts = make_alerts(config, matches)
     record = {
         "since": since.isoformat(timespec="seconds"),
         "until": until.isoformat(timespec="seconds"),
@@ -135,6 +204,7 @@ def monitor_run(config, since, until, directory):
             for m in matches
         ],
     }
-    path = Path(directory) / "monitor.json"
-    path.write_text(json.dumps(record, indent=2) + "\n", encoding="utf-8")
-    return record, matches
+    directory = Path(directory)
+    (directory / "monitor.json").write_text(json.dumps(record, indent=2) + "\n", encoding="utf-8")
+    (directory / "alerts.json").write_text(json.dumps(alerts, indent=2) + "\n", encoding="utf-8")
+    return record, alerts

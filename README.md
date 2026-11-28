@@ -134,7 +134,7 @@ The container starts NexStock through `apps/nexstock/apiguard_logging.py`. This 
 
 ### Security monitoring
 
-After each `apiguard run`, APIGuard reads the API container logs for the run time. It applies the rules in `configs/monitor/rules.yaml` and saves the matches in `monitor.json` in the run directory. A rule matches when a number of events with the given fields occur in a time window.
+After each `apiguard run`, APIGuard reads the API container logs for the run time. It applies the rules in `configs/monitor/rules.yaml` and saves the matches in `monitor.json` and the alerts in `alerts.json` in the run directory. Each alert has the rule, app, time, severity and up to 20 log lines, with secrets removed. Repeated matches of one rule in one time window make one alert. A rule matches when a number of events with the given fields occur in a time window.
 
 Check the rules against live NexStock with known normal and suspicious requests:
 
