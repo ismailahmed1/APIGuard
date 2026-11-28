@@ -22,6 +22,7 @@ APIGuard currently supports:
 - Summarizing every operation in the specification with `apiguard spec`.
 - Generating test suites with Claude, validating them and saving them with `apiguard generate`.
 - Running saved suites without the AI model with `apiguard run`, and reading results with `apiguard report`.
+- Running a saved suite more than one time with `apiguard validate <app> --runs N`. It flags tests with different results and saves the saved, rejected and flaky tests in `validation.json` in the suite directory.
 - Comparing two runs with `apiguard compare`, and running a Schemathesis baseline with `apiguard baseline`.
 - Evaluating fault detection against seeded NexStock faults with `scripts/evaluate_faults.py`.
 
