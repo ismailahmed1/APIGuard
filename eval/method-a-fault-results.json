@@ -1,0 +1,31 @@
+{
+  "suite_id": "20261128-014844",
+  "method": "pytest-direct",
+  "tests": 164,
+  "original": {
+    "passed": 135,
+    "failed": 29
+  },
+  "new_failures_by_fault": {
+    "F01-products-list-without-auth": [
+      "test_products_list_anonymous_unauthorized"
+    ],
+    "F02-category-create-wrong-status": [
+      "test_categories_create_description_max_length",
+      "test_categories_create_happy_path",
+      "test_categories_create_name_max_length",
+      "test_categories_create_name_min_length",
+      "test_categories_create_null_description",
+      "test_categories_create_without_description"
+    ],
+    "F03-product-negative-price-accepted": [
+      "test_products_create_unit_price_negative",
+      "test_products_create_unit_price_zero"
+    ],
+    "F04-category-delete-manager-allowed": [],
+    "F05-products-ignore-category-filter": [
+      "test_products_list_filter_category_contents"
+    ],
+    "F06-product-delete-no-effect": []
+  }
+}
