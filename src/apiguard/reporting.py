@@ -80,6 +80,25 @@ def format_run(run, results):
     return "\n".join(lines)
 
 
+def format_alerts(alerts):
+    """One line for each security alert."""
+    if not alerts:
+        return []
+    rows = [("TIME", "SEVERITY", "RULE", "GROUP", "EVENTS")]
+    for alert in alerts:
+        group = f"{alert['group_by']}={alert['group']}" if alert.get("group_by") else "-"
+        rows.append(
+            (
+                alert["time"],
+                alert["severity"],
+                f"{alert['rule']} {alert['name']}",
+                group,
+                alert["event_count"],
+            )
+        )
+    return table(rows)
+
+
 def _classified_by(result):
     return {"rule": f"rule {result.get('rule')}", "ai": "AI model"}.get(
         result.get("classified_by"), "-"

@@ -17,7 +17,7 @@ from apiguard.generator import generate_suite
 from apiguard.monitor import MonitorError, monitor_run
 from apiguard.openapi import SpecError, get_response, load_spec
 from apiguard.operations import extract_operations
-from apiguard.reporting import compare_runs, format_run, format_suite, table
+from apiguard.reporting import compare_runs, format_alerts, format_run, format_suite, table
 from apiguard.runner import RunError, get_token, load_suite, reset_app, run_suite
 
 MEDIA_LABELS = {
@@ -191,12 +191,12 @@ def cmd_run(args):
     if config.get("monitor"):
         since = datetime.fromisoformat(run["started_at"])
         try:
-            record, _ = monitor_run(config, since, datetime.now(UTC), directory)
+            record, alerts = monitor_run(config, since, datetime.now(UTC), directory)
         except MonitorError as exc:
             print(f"\nSecurity monitor: {exc}", file=sys.stderr)
         else:
-            rules = ", ".join(sorted({m["rule"] for m in record["matches"]})) or "none"
-            print(f"\nSecurity monitor: {record['events']} log events, rules matched: {rules}")
+            print(f"\nSecurity monitor: {record['events']} log events, {len(alerts)} alerts")
+            print("\n".join("  " + line for line in format_alerts(alerts)))
     return 0 if run["outcomes"].get("passed", 0) == run["total"] else 1
 
 
