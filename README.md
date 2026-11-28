@@ -152,6 +152,21 @@ Each suspicious step must trigger its rule. The normal step must trigger no rule
 ### Run a suite in Docker
 
 `apiguard run nexstock --docker` runs the suite's Pytest files in a container on the NexStock Compose network. It builds the `apiguard-runner:local` image from `docker/runner/Dockerfile`, resets the data and runs Pytest. The container gets the role credentials and no AI key. The request and run time limits come from the configuration. The JUnit report and `summary.json` are saved in `runs/nexstock/docker-<time>/`. The `docker_run` settings in `configs/nexstock.yaml` give the network, the address and the reset command in the container.
+## Run the FastAPI Banking System in Docker
+
+From the APIGuard repository root:
+
+```powershell
+docker compose -f apps/banking/compose.yaml up --detach --wait api
+.\.venv\Scripts\apiguard.exe check banking
+.\.venv\Scripts\apiguard.exe run banking
+```
+
+This builds the app from commit `6e8ed525c5bcc70e06820cefc661ab772da30317`, starts MySQL and Redis, loads the seed data and serves the API at `http://127.0.0.1:8013`. `docker compose -f apps/banking/compose.yaml run --rm reset` restores `apps/banking/seed.sql` and empties the Redis cache.
+
+- `apps/banking/apiguard_app.py` starts the app. It turns off the rate limits, because login allows only five requests each minute. It also writes the same JSON request and login lines as NexStock. Failed logins show as `login_failure` events.
+- `seed.sql` has the tables and two users: `apiguard-admin` (ADMIN) and `apiguard-user` (USER). Their local test passwords are in `apps/banking/make_seed.sh`. Put the names and passwords in the `BANKING_*` variables in `.env`.
+- `suites/banking/smoke` is a six-test smoke suite, written by hand.
 
 NexStock v1 has known defects, which APIGuard should detect: `GET /api/auth/me` and `GET /api/inventory` return HTTP 500 for every authenticated request.
 

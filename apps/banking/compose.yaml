@@ -1,0 +1,74 @@
+name: apiguard-banking
+
+x-database: &database
+  MYSQL_DATABASE: banking
+  MYSQL_USER: banking
+  MYSQL_PASSWORD: banking
+  MYSQL_ROOT_PASSWORD: banking-root
+
+services:
+  mysql:
+    image: mysql:8.4.3
+    environment: *database
+    healthcheck:
+      test: ["CMD", "mysqladmin", "ping", "-h", "127.0.0.1", "-ubanking", "-pbanking"]
+      interval: 2s
+      retries: 60
+
+  redis:
+    image: redis:7.4.1-alpine
+    healthcheck:
+      test: ["CMD", "redis-cli", "ping"]
+      interval: 2s
+      retries: 30
+
+  # Empties the account cache. The reset service runs it first.
+  reset-cache:
+    image: redis:7.4.1-alpine
+    depends_on:
+      redis:
+        condition: service_healthy
+    command: ["redis-cli", "-h", "redis", "FLUSHALL"]
+
+  # Restores seed.sql. It runs once before the API starts, and again on demand:
+  #   docker compose -f apps/banking/compose.yaml run --rm reset
+  reset:
+    image: mysql:8.4.3
+    depends_on:
+      mysql:
+        condition: service_healthy
+      reset-cache:
+        condition: service_completed_successfully
+    volumes:
+      - ./seed.sql:/seed.sql:ro
+    command: ["sh", "-c", "mysql -h mysql -ubanking -pbanking banking < /seed.sql"]
+
+  api:
+    build:
+      context: .
+      additional_contexts:
+        shared: ../nexstock
+    image: apiguard-banking-api:local
+    depends_on:
+      reset:
+        condition: service_completed_successfully
+    environment:
+      ENV: docker
+      DB_HOST: mysql
+      DB_PORT: "3306"
+      DB_NAME: banking
+      DB_USER: banking
+      DB_PASSWORD: banking
+      REDIS_HOST: redis
+      REDIS_PORT: "6379"
+      # Local test value only; this container is not reachable from other computers.
+      SECRET_KEY: apiguard-local-banking-test-key-0001
+      ALGORITHM: HS256
+      ACCESS_TOKEN_EXPIRE_MINUTES: "30"
+    healthcheck:
+      test: ["CMD", "python", "-c", "import urllib.request; urllib.request.urlopen('http://127.0.0.1:8000/openapi.json', timeout=2).close()"]
+      interval: 2s
+      timeout: 4s
+      retries: 45
+    ports:
+      - "127.0.0.1:8013:8000"

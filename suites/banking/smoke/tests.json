@@ -1,0 +1,83 @@
+[
+  {
+    "id": "banking-login-user",
+    "type": "happy_path",
+    "description": "The seeded customer can log in.",
+    "method": "POST",
+    "path": "/api/login",
+    "role": "anonymous",
+    "path_params": {},
+    "query_params": {},
+    "body": {
+      "username": "{{user.email}}",
+      "password": "{{user.password}}"
+    },
+    "expected_status": 200
+  },
+  {
+    "id": "banking-accounts-user",
+    "type": "happy_path",
+    "description": "The customer can list their accounts.",
+    "method": "GET",
+    "path": "/api/accounts",
+    "role": "user",
+    "path_params": {},
+    "query_params": {},
+    "body": null,
+    "expected_status": 200
+  },
+  {
+    "id": "banking-accounts-anonymous",
+    "type": "authentication",
+    "description": "The account list requires a login.",
+    "method": "GET",
+    "path": "/api/accounts",
+    "role": "anonymous",
+    "path_params": {},
+    "query_params": {},
+    "body": null,
+    "expected_status": 401
+  },
+  {
+    "id": "banking-account-create",
+    "type": "happy_path",
+    "description": "The customer can open an account.",
+    "method": "POST",
+    "path": "/api/accounts",
+    "role": "user",
+    "path_params": {},
+    "query_params": {},
+    "body": {
+      "acc_no": 1001,
+      "pin": "1234"
+    },
+    "expected_status": 200
+  },
+  {
+    "id": "banking-account-create-short-pin",
+    "type": "boundary_value",
+    "description": "A three-digit PIN is rejected.",
+    "method": "POST",
+    "path": "/api/accounts",
+    "role": "user",
+    "path_params": {},
+    "query_params": {},
+    "body": {
+      "acc_no": 1002,
+      "pin": "123"
+    },
+    "expected_status": 422
+  },
+  {
+    "id": "banking-admin-users",
+    "type": "happy_path",
+    "description": "The admin can list all users.",
+    "method": "GET",
+    "path": "/api/admin/users",
+    "role": "admin",
+    "path_params": {},
+    "query_params": {},
+    "body": null,
+    "expected_status": 200
+  }
+]

@@ -1,0 +1,30 @@
+name: banking
+# Pinned upstream revision in apps/banking/Dockerfile; update both together.
+app_commit: 6e8ed525c5bcc70e06820cefc661ab772da30317
+base_url: http://127.0.0.1:8013
+spec_location: http://127.0.0.1:8013/openapi.json
+
+timeouts:
+  request_seconds: 10
+  run_seconds: 120
+
+auth:
+  login_path: /api/login
+  token_path: access_token
+  username_field: username
+  roles:
+    admin:
+      email_env: BANKING_ADMIN_USERNAME
+      password_env: BANKING_ADMIN_PASSWORD
+    user:
+      email_env: BANKING_USER_USERNAME
+      password_env: BANKING_USER_PASSWORD
+
+reset:
+  command: [docker, compose, -f, apps/banking/compose.yaml, run, --rm, reset]
+
+
+# Security monitoring (FR-11): the logs of the API container and the rules to apply.
+monitor:
+  logs_command: [docker, compose, -f, apps/banking/compose.yaml, logs, --no-color, --no-log-prefix, api]
+  rules: configs/monitor/rules.yaml

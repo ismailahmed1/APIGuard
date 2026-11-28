@@ -1,0 +1,11 @@
+{
+  "suite_id": "smoke",
+  "app": "banking",
+  "generation_method": "manual-smoke",
+  "counts": {
+    "generated": 6,
+    "valid": 6,
+    "excluded": 0
+  },
+  "spec_sha256": "7eaee792545bd2f2314ba97f5302c5ac444e0e7b4daaae730cf5bebefc3b88d6"
+}
