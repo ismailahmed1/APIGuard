@@ -35,6 +35,15 @@ monitor:
   logs_command: [docker, compose, -f, apps/nexstock/compose.yaml, logs, --no-color, --no-log-prefix, api]
   rules: configs/monitor/rules.yaml
 
+# Run saved Pytest suites in a container on the Compose network (apiguard run --docker).
+docker_run:
+  network: apiguard-nexstock_default
+  base_url: http://api:8000
+  reset_command: [psql, --host=db, --username=nexstock, --dbname=nexstock, -v, ON_ERROR_STOP=1, --quiet, --output=/dev/null, -f, apps/nexstock/seed.sql]
+  environment:
+    PGPASSWORD: nexstock
+    PGOPTIONS: "-c client_min_messages=warning"
+
 # Test generation with the AI model (apiguard generate).
 generation:
   model: claude-opus-5-5

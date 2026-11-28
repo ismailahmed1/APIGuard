@@ -14,6 +14,7 @@ from apiguard.ai import AIClient, AIError
 from apiguard.baseline import BaselineError, compare_baselines, run_baseline
 from apiguard.builder import build_pytest, collect
 from apiguard.config import ConfigError, load_config
+from apiguard.docker_run import run_in_docker
 from apiguard.generator import generate_suite
 from apiguard.metrics import record_metrics, run_metrics
 from apiguard.monitor import MonitorError, monitor_run
@@ -80,7 +81,11 @@ def main(argv=None):
     )
     validate.add_argument("--suite", help="Suite ID (default: the latest suite).")
     validate.add_argument("--runs", type=int, default=3, help="Number of runs (default: 3).")
-
+    run.add_argument(
+        "--docker",
+        action="store_true",
+        help="Run the suite's Pytest files in a container on the app's Docker network.",
+    )
     build = command("build", "Convert a saved suite to Pytest files.")
     build.add_argument("--suite", help="Suite ID (default: the latest suite).")
     report = command("report", "Show the report of a saved run.")
@@ -197,6 +202,8 @@ def cmd_generate(args):
 
 def cmd_run(args):
     config = load_app(args.app)
+    if args.docker:
+        return run_docker(config, args)
     try:
         suite_dir, metadata, tests = load_suite(SUITES_DIR, config["name"], args.suite)
         # The suite's own snapshot describes the operations that its tests were written for.
@@ -276,6 +283,26 @@ def cmd_validate(args):
     print(format_validation(report))
     print(f"\nSaved to {path}")
     return 1 if report["flaky"] else 0
+
+
+def run_docker(config, args):
+    try:
+        suite_dir, _, tests = load_suite(SUITES_DIR, config["name"], args.suite)
+        if not (suite_dir / "pytest" / "conftest.py").exists():
+            build_pytest(suite_dir, tests)
+        directory, summary = run_in_docker(config, suite_dir, RUNS_DIR, args.label)
+    except RunError as exc:
+        raise Failure(f"Run error: {exc}", 1) from exc
+    outcomes = summary["outcomes"]
+    print(
+        f"Docker run {summary['run_id']}: suite {summary['suite']}, {summary['total']} tests, "
+        f"{summary['seconds']} s, no AI model used"
+    )
+    print("  ".join(f"{name} {outcomes.get(name, 0)}" for name in ("passed", "failed", "error")))
+    if summary["timed_out"]:
+        print("The run time limit stopped the container.")
+    print(f"Saved to {directory}")
+    return 0 if summary["total"] and outcomes.get("passed", 0) == summary["total"] else 1
 
 
 def cmd_build(args):
