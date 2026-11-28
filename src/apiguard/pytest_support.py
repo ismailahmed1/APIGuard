@@ -96,12 +96,20 @@ def open_api(suite_dir):
     APIGUARD_CONFIG: the app configuration file (default: configs/<app>.yaml).
     APIGUARD_BASE_URL: the app address, for example on a Docker network.
     APIGUARD_NO_RESET=1: do not reset the test data.
+    APIGUARD_IN_DOCKER=1: use the `docker_run` address and reset command of the configuration.
     """
-    # Credentials come from the environment or an untracked .env file, as for the CLI.
-    load_dotenv(Path(".env"), override=False)
+    # Credentials come from the environment or an untracked .env file, as for the CLI. In the
+    # runner container, they come only from the environment, and the AI key is not available.
+    if os.environ.get("APIGUARD_IN_DOCKER") != "1":
+        load_dotenv(Path(".env"), override=False)
     suite_dir = Path(suite_dir)
     app = suite_dir.parent.name
     config = load_config(os.environ.get("APIGUARD_CONFIG", f"configs/{app}.yaml"))
+    if os.environ.get("APIGUARD_IN_DOCKER") == "1":
+        # Inside the runner container, use the addresses on the app's Docker network.
+        settings = config.get("docker_run", {})
+        config["base_url"] = settings.get("base_url", config["base_url"])
+        config["reset"] = {"command": settings.get("reset_command")}
     if os.environ.get("APIGUARD_BASE_URL"):
         config["base_url"] = os.environ["APIGUARD_BASE_URL"]
     snapshot = load_spec(str(suite_dir / "openapi.yaml"), config["timeouts"]["request_seconds"])
