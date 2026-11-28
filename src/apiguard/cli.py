@@ -11,6 +11,7 @@ from dotenv import load_dotenv
 from apiguard import __version__
 from apiguard.ai import AIClient, AIError
 from apiguard.baseline import BaselineError, compare_baselines, run_baseline
+from apiguard.builder import build_pytest, collect
 from apiguard.config import ConfigError, load_config
 from apiguard.generator import generate_suite
 from apiguard.openapi import SpecError, get_response, load_spec
@@ -54,6 +55,8 @@ def main(argv=None):
     run.add_argument("--suite", help="Suite ID (default: the latest suite).")
     run.add_argument("--label", help="Label for this run, such as a seeded fault ID.")
     run.add_argument("--no-reset", action="store_true", help="Do not reset the test data.")
+    build = command("build", "Convert a saved suite to Pytest files.")
+    build.add_argument("--suite", help="Suite ID (default: the latest suite).")
     report = command("report", "Show the report of a saved run.")
     report.add_argument("--run", help="Run ID (default: the latest run).")
     compare = command("compare", "Find tests that pass in a base run and fail in another run.")
@@ -175,6 +178,24 @@ def cmd_run(args):
         raise Failure(f"Run error: {exc}", 1) from exc
     print(format_run(run, results))
     return 0 if run["outcomes"].get("passed", 0) == run["total"] else 1
+
+
+def cmd_build(args):
+    config = load_app(args.app)
+    try:
+        suite_dir, metadata, tests = load_suite(SUITES_DIR, config["name"], args.suite)
+    except RunError as exc:
+        raise Failure(f"Error: {exc}", 2) from exc
+    paths = build_pytest(suite_dir, tests)
+    result = {"files_written": len(paths), "tests_written": len(tests), **collect(paths[0].parent)}
+    metadata["pytest_build"] = result
+    (suite_dir / "suite.json").write_text(json.dumps(metadata, indent=2) + "\n", "utf-8")
+    print(
+        f"Wrote {len(tests)} tests in {len(paths)} files to {suite_dir / 'pytest'}. "
+        f"Pytest collects {result['tests_collected']} tests in {result['files_collected']} files."
+    )
+    print(f"Run them with: python -m pytest {suite_dir / 'pytest'}")
+    return 0 if result["collect_exit_code"] == 0 else 1
 
 
 def cmd_report(args):
@@ -322,6 +343,7 @@ COMMANDS = {
     "spec": cmd_spec,
     "generate": cmd_generate,
     "run": cmd_run,
+    "build": cmd_build,
     "report": cmd_report,
     "compare": cmd_compare,
     "baseline": cmd_baseline,

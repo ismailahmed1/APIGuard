@@ -31,7 +31,8 @@ testpaths = ["tests"]
 [tool.ruff]
 target-version = "py311"
 line-length = 100
-extend-exclude = ["apps/template/upstream", "apps/tasks/upstream"]
+# Generated test suites are not edited by hand.
+extend-exclude = ["apps/template/upstream", "apps/tasks/upstream", "suites"]
 
 [tool.setuptools.package-data]
 apiguard = ["ui.html"]
