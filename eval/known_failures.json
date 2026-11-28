@@ -1,0 +1,387 @@
+[
+  {
+    "name": "F02 category create returns 200",
+    "expected_category": "unexpected_status",
+    "result": {
+      "id": "F02 category create returns 200",
+      "type": "happy_path",
+      "operation": "POST /api/categories",
+      "role": "admin",
+      "expected": {
+        "status": 201
+      },
+      "actual": {
+        "status": 200,
+        "body_excerpt": ""
+      },
+      "outcome": "failed",
+      "category": null,
+      "detail": "unexpected status 200 (expected 201)"
+    }
+  },
+  {
+    "name": "inventory list crashes",
+    "expected_category": "unexpected_status",
+    "result": {
+      "id": "inventory list crashes",
+      "type": "happy_path",
+      "operation": "GET /api/inventory",
+      "role": "admin",
+      "expected": {
+        "status": 200
+      },
+      "actual": {
+        "status": 500,
+        "body_excerpt": ""
+      },
+      "outcome": "failed",
+      "category": null,
+      "detail": "server error 500 (expected 200)"
+    }
+  },
+  {
+    "name": "auth me crashes",
+    "expected_category": "unexpected_status",
+    "result": {
+      "id": "auth me crashes",
+      "type": "happy_path",
+      "operation": "GET /api/auth/me",
+      "role": "manager",
+      "expected": {
+        "status": 200
+      },
+      "actual": {
+        "status": 500,
+        "body_excerpt": ""
+      },
+      "outcome": "failed",
+      "category": null,
+      "detail": "server error 500 (expected 200)"
+    }
+  },
+  {
+    "name": "product list has wrong shape",
+    "expected_category": "response_schema_mismatch",
+    "result": {
+      "id": "product list has wrong shape",
+      "type": "happy_path",
+      "operation": "GET /api/products",
+      "role": "admin",
+      "expected": {
+        "status": 200
+      },
+      "actual": {
+        "status": 200,
+        "body_excerpt": ""
+      },
+      "outcome": "failed",
+      "category": null,
+      "detail": "response does not match its schema at data/0/price: 'abc' is not of type 'number'"
+    }
+  },
+  {
+    "name": "product body is not JSON",
+    "expected_category": "response_schema_mismatch",
+    "result": {
+      "id": "product body is not JSON",
+      "type": "happy_path",
+      "operation": "GET /api/products/{product_id}",
+      "role": "admin",
+      "expected": {
+        "status": 200
+      },
+      "actual": {
+        "status": 200,
+        "body_excerpt": ""
+      },
+      "outcome": "failed",
+      "category": null,
+      "detail": "response is not JSON although the specification documents a JSON body"
+    }
+  },
+  {
+    "name": "F03 negative price accepted",
+    "expected_category": "input_validation",
+    "result": {
+      "id": "F03 negative price accepted",
+      "type": "schema_validation",
+      "operation": "POST /api/products",
+      "role": "admin",
+      "expected": {
+        "status": 422
+      },
+      "actual": {
+        "status": 201,
+        "body_excerpt": ""
+      },
+      "outcome": "failed",
+      "category": null,
+      "detail": "unexpected status 201 (expected 422)"
+    }
+  },
+  {
+    "name": "name past max length accepted",
+    "expected_category": "input_validation",
+    "result": {
+      "id": "name past max length accepted",
+      "type": "boundary_value",
+      "operation": "POST /api/categories",
+      "role": "admin",
+      "expected": {
+        "status": 422
+      },
+      "actual": {
+        "status": 201,
+        "body_excerpt": ""
+      },
+      "outcome": "failed",
+      "category": null,
+      "detail": "unexpected status 201 (expected 422)"
+    }
+  },
+  {
+    "name": "valid name at max length rejected",
+    "expected_category": "input_validation",
+    "result": {
+      "id": "valid name at max length rejected",
+      "type": "boundary_value",
+      "operation": "POST /api/categories",
+      "role": "admin",
+      "expected": {
+        "status": 201
+      },
+      "actual": {
+        "status": 422,
+        "body_excerpt": ""
+      },
+      "outcome": "failed",
+      "category": null,
+      "detail": "unexpected status 422 (expected 201)"
+    }
+  },
+  {
+    "name": "F01 product list without token",
+    "expected_category": "auth_failure",
+    "result": {
+      "id": "F01 product list without token",
+      "type": "authentication",
+      "operation": "GET /api/products",
+      "role": "anonymous",
+      "expected": {
+        "status": 401
+      },
+      "actual": {
+        "status": 200,
+        "body_excerpt": ""
+      },
+      "outcome": "failed",
+      "category": null,
+      "detail": "unexpected status 200 (expected 401)"
+    }
+  },
+  {
+    "name": "F04 manager deletes a category",
+    "expected_category": "auth_failure",
+    "result": {
+      "id": "F04 manager deletes a category",
+      "type": "authorization",
+      "operation": "DELETE /api/categories/{category_id}",
+      "role": "manager",
+      "expected": {
+        "status": 403
+      },
+      "actual": {
+        "status": 204,
+        "body_excerpt": ""
+      },
+      "outcome": "failed",
+      "category": null,
+      "detail": "unexpected status 204 (expected 403)"
+    }
+  },
+  {
+    "name": "admin token rejected",
+    "expected_category": "auth_failure",
+    "result": {
+      "id": "admin token rejected",
+      "type": "happy_path",
+      "operation": "GET /api/users",
+      "role": "admin",
+      "expected": {
+        "status": 200
+      },
+      "actual": {
+        "status": 403,
+        "body_excerpt": ""
+      },
+      "outcome": "failed",
+      "category": null,
+      "detail": "unexpected status 403 (expected 200)"
+    }
+  },
+  {
+    "name": "F06 deleted product still exists",
+    "expected_category": "business_logic",
+    "result": {
+      "id": "F06 deleted product still exists",
+      "type": "stateful_workflow",
+      "operation": "DELETE /api/products/{product_id}",
+      "role": "admin",
+      "expected": {
+        "status": 404
+      },
+      "actual": {
+        "status": 200,
+        "body_excerpt": ""
+      },
+      "outcome": "failed",
+      "category": null,
+      "detail": "unexpected status 200 (expected 404)"
+    }
+  },
+  {
+    "name": "seeded product missing",
+    "expected_category": "business_logic",
+    "result": {
+      "id": "seeded product missing",
+      "type": "happy_path",
+      "operation": "GET /api/products/{product_id}",
+      "role": "admin",
+      "expected": {
+        "status": 200
+      },
+      "actual": {
+        "status": 404,
+        "body_excerpt": ""
+      },
+      "outcome": "failed",
+      "category": null,
+      "detail": "unexpected status 404 (expected 200)"
+    }
+  },
+  {
+    "name": "duplicate SKU conflict on new product",
+    "expected_category": "business_logic",
+    "result": {
+      "id": "duplicate SKU conflict on new product",
+      "type": "happy_path",
+      "operation": "POST /api/products",
+      "role": "admin",
+      "expected": {
+        "status": 201
+      },
+      "actual": {
+        "status": 409,
+        "body_excerpt": ""
+      },
+      "outcome": "failed",
+      "category": null,
+      "detail": "unexpected status 409 (expected 201)"
+    }
+  },
+  {
+    "name": "operation removed from spec",
+    "expected_category": "generated_test_error",
+    "result": {
+      "id": "operation removed from spec",
+      "type": "happy_path",
+      "operation": "GET /api/old",
+      "role": "admin",
+      "expected": {
+        "status": 200
+      },
+      "actual": null,
+      "outcome": "error",
+      "category": "generated_test_error",
+      "detail": "operation is no longer in the specification"
+    }
+  },
+  {
+    "name": "role variable not set",
+    "expected_category": "configuration_error",
+    "result": {
+      "id": "role variable not set",
+      "type": "happy_path",
+      "operation": "GET /api/products",
+      "role": "manager",
+      "expected": {
+        "status": 200
+      },
+      "actual": null,
+      "outcome": "error",
+      "category": "configuration_error",
+      "detail": "environment variable NEXSTOCK_MANAGER_PASSWORD is not set"
+    }
+  },
+  {
+    "name": "login fails for role",
+    "expected_category": "configuration_error",
+    "result": {
+      "id": "login fails for role",
+      "type": "happy_path",
+      "operation": "GET /api/products",
+      "role": "admin",
+      "expected": {
+        "status": 200
+      },
+      "actual": null,
+      "outcome": "error",
+      "category": "configuration_error",
+      "detail": "login as 'admin' failed with HTTP 401"
+    }
+  },
+  {
+    "name": "request timed out",
+    "expected_category": "infrastructure_error",
+    "result": {
+      "id": "request timed out",
+      "type": "happy_path",
+      "operation": "GET /api/reports",
+      "role": "admin",
+      "expected": {
+        "status": 200
+      },
+      "actual": null,
+      "outcome": "error",
+      "category": "infrastructure_error",
+      "detail": "request timed out"
+    }
+  },
+  {
+    "name": "run time limit reached",
+    "expected_category": "infrastructure_error",
+    "result": {
+      "id": "run time limit reached",
+      "type": "happy_path",
+      "operation": "GET /api/products",
+      "role": "admin",
+      "expected": {
+        "status": 200
+      },
+      "actual": null,
+      "outcome": "not_run",
+      "category": "infrastructure_error",
+      "detail": "run time limit"
+    }
+  },
+  {
+    "name": "proxy returns 502",
+    "expected_category": "infrastructure_error",
+    "result": {
+      "id": "proxy returns 502",
+      "type": "happy_path",
+      "operation": "GET /api/products",
+      "role": "admin",
+      "expected": {
+        "status": 200
+      },
+      "actual": {
+        "status": 502,
+        "body_excerpt": ""
+      },
+      "outcome": "failed",
+      "category": null,
+      "detail": "server error 502 (expected 200)"
+    }
+  }
+]

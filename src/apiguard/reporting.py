@@ -1,13 +1,9 @@
 """Format run results, failure categories and run comparisons for the CLI."""
 
+from apiguard.classifier import CATEGORIES, UNCLASSIFIED
 from apiguard.validator import TEST_TYPES
 
-CATEGORY_LABELS = {
-    "api_failure": "API failure",
-    "test_error": "Generated-test error",
-    "configuration_error": "Configuration error",
-    "infrastructure_error": "Infrastructure error",
-}
+CATEGORY_LABELS = {**CATEGORIES, UNCLASSIFIED: "Unclassified failure"}
 
 
 def table(rows):
@@ -68,7 +64,7 @@ def format_run(run, results):
         in_category = [r for r in problems if r["category"] == category]
         if not in_category:
             continue
-        lines += ["", f"{label_text}s ({len(in_category)}):"]
+        lines += ["", f"{label_text} ({len(in_category)}):"]
         rows = [(r["id"], r["operation"], r["role"], r["detail"]) for r in in_category]
         lines += ["  " + line for line in table(rows)]
     return "\n".join(lines)

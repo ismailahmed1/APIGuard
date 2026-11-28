@@ -121,7 +121,7 @@ def test_run_records_results_and_categories(server):
     assert by_id["list"]["outcome"] == "passed"
     assert by_id["anonymous"]["outcome"] == "passed"
     assert by_id["create"]["actual"]["status"] == 201
-    assert by_id["delete"]["category"] == "api_failure"
+    assert by_id["delete"]["category"] == "unexpected_status"
     assert by_id["delete"]["detail"] == "server error 500 (expected 200)"
     assert by_id["delete"]["request"]["path_params"] == {"product_id": "3"}
     assert by_id["manager"]["category"] == "configuration_error"
@@ -133,7 +133,7 @@ def test_run_records_results_and_categories(server):
     assert all(isinstance(result["duration_ms"], int) for result in results)
 
     assert summary["outcomes"] == {"passed": 3, "failed": 1, "error": 1}
-    assert summary["categories"] == {"api_failure": 1, "configuration_error": 1}
+    assert summary["categories"] == {"unexpected_status": 1, "configuration_error": 1}
     assert summary["ai_model_used"] is False
     saved = json.loads((directory / "results.json").read_text())
     assert saved == results
