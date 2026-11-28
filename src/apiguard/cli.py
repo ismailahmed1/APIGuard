@@ -56,6 +56,11 @@ def main(argv=None):
     run.add_argument("--suite", help="Suite ID (default: the latest suite).")
     run.add_argument("--label", help="Label for this run, such as a seeded fault ID.")
     run.add_argument("--no-reset", action="store_true", help="Do not reset the test data.")
+    run.add_argument(
+        "--ai-classify",
+        action="store_true",
+        help="Send failures that no rule classifies to the AI model.",
+    )
     report = command("report", "Show the report of a saved run.")
     report.add_argument("--run", help="Run ID (default: the latest run).")
     compare = command("compare", "Find tests that pass in a base run and fail in another run.")
@@ -171,7 +176,14 @@ def cmd_run(args):
         snapshot = load_spec(str(suite_dir / "openapi.yaml"), config["timeouts"]["request_seconds"])
         operations = extract_operations(snapshot.document)
         directory, run, results = run_suite(
-            config, metadata, tests, operations, RUNS_DIR, args.label, reset=not args.no_reset
+            config,
+            metadata,
+            tests,
+            operations,
+            RUNS_DIR,
+            args.label,
+            reset=not args.no_reset,
+            ai=classification_ai(config) if args.ai_classify else None,
         )
     except (RunError, SpecError) as exc:
         raise Failure(f"Run error: {exc}", 1) from exc
@@ -186,6 +198,18 @@ def cmd_run(args):
             rules = ", ".join(sorted({m["rule"] for m in record["matches"]})) or "none"
             print(f"\nSecurity monitor: {record['events']} log events, rules matched: {rules}")
     return 0 if run["outcomes"].get("passed", 0) == run["total"] else 1
+
+
+def classification_ai(config):
+    """The AI client for failures that no rule classifies; it uses the generation settings."""
+    if not (os.environ.get("ANTHROPIC_API_KEY") or os.environ.get("ANTHROPIC_AUTH_TOKEN")):
+        raise Failure("Configuration error: ANTHROPIC_API_KEY is not set.", 2)
+    settings = {**config.get("generation", {}), **config.get("classification", {})}
+    return AIClient(
+        settings.get("model", DEFAULT_MODEL),
+        settings.get("limits", {}),
+        effort=settings.get("effort", "low"),
+    )
 
 
 def cmd_report(args):

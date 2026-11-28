@@ -1,11 +1,15 @@
+import base64
 import json
 import subprocess
+import time
+from pathlib import Path
 
 import httpx
 import pytest
 from shop_spec import SHOP
 
 from apiguard.operations import extract_operations
+from apiguard.reporting import format_run
 from apiguard.runner import RunError, get_token, load_suite, run_suite
 
 TOKEN = "eyJhbGciOiJIUzI1NiJ9.eyJzdWIiOiIxIn0.c2lnbmF0dXJl"
@@ -117,7 +121,7 @@ def test_run_records_results_and_categories(server):
     assert by_id["list"]["outcome"] == "passed"
     assert by_id["anonymous"]["outcome"] == "passed"
     assert by_id["create"]["actual"]["status"] == 201
-    assert by_id["delete"]["category"] == "api_failure"
+    assert by_id["delete"]["category"] == "unexpected_status"
     assert by_id["delete"]["detail"] == "server error 500 (expected 200)"
     assert by_id["delete"]["request"]["path_params"] == {"product_id": "3"}
     assert by_id["manager"]["category"] == "configuration_error"
@@ -129,7 +133,7 @@ def test_run_records_results_and_categories(server):
     assert all(isinstance(result["duration_ms"], int) for result in results)
 
     assert summary["outcomes"] == {"passed": 3, "failed": 1, "error": 1}
-    assert summary["categories"] == {"api_failure": 1, "configuration_error": 1}
+    assert summary["categories"] == {"unexpected_status": 1, "configuration_error": 1}
     assert summary["ai_model_used"] is False
     saved = json.loads((directory / "results.json").read_text())
     assert saved == results
@@ -285,3 +289,92 @@ def test_each_request_uses_a_fresh_connection(server, monkeypatch):
     monkeypatch.setattr("apiguard.runner.httpx.Client", client)
     run([make_test("list", "GET", "/api/products")])
     assert created[0]["limits"].max_keepalive_connections == 0
+
+
+def test_failures_are_redacted_before_the_ai_model_sees_them(server, monkeypatch):
+    from test_generation import FakeAnthropic
+
+    from apiguard.ai import AIClient
+    from apiguard.classifier import UNCLASSIFIED
+
+    monkeypatch.setattr("apiguard.classifier.classify", lambda result: (UNCLASSIFIED, None))
+    server["handler"]["value"] = lambda r: (
+        shop(r) if r.url.path == "/api/auth/login" else httpx.Response(500, text=PASSWORD + TOKEN)
+    )
+    answer = json.dumps({"classifications": [{"id": "list", "category": "unexpected_status"}]})
+    fake = FakeAnthropic([(answer, "end_turn")])
+    ai = AIClient("claude-opus-5-5", {}, client=fake)
+    _, summary, results = run_suite(
+        config(),
+        {"suite_id": "s1"},
+        [make_test("list", "GET", "/api/products")],
+        OPERATIONS,
+        "runs",
+        ai=ai,
+    )
+    prompt = fake.requests[0]["messages"][0]["content"]
+    assert PASSWORD not in prompt
+    assert TOKEN not in prompt
+    assert results[0]["classified_by"] == "ai"
+    assert summary["ai_model_used"] is True
+    assert summary["ai_usage"]["calls"] == 1
+    assert summary["categories"] == {"unexpected_status": 1}
+
+
+def test_run_without_ai_records_no_ai_use(server):
+    _, summary, _ = run([make_test("list", "GET", "/api/products")])
+    assert summary["ai_model_used"] is False
+    assert summary["ai_usage"] is None
+
+
+def jwt(claims):
+    payload = base64.urlsafe_b64encode(json.dumps(claims).encode()).decode().rstrip("=")
+    return f"eyJhbGciOiJIUzI1NiJ9.{payload}.c2lnbmF0dXJl"
+
+
+def test_expired_token_is_refreshed(server, monkeypatch):
+    issued = []
+
+    def expiring(request):
+        if request.url.path == "/api/auth/login":
+            # Each token expires 10 seconds after it is issued: inside the refresh margin.
+            issued.append(jwt({"sub": "1", "exp": int(time.time()) + 10, "n": len(issued)}))
+            return httpx.Response(200, json={"data": {"access_token": issued[-1]}})
+        if request.headers.get("Authorization") != f"Bearer {issued[-1]}":
+            return httpx.Response(401, json={"detail": "Token expired"})
+        return httpx.Response(200, json={"data": []})
+
+    server["handler"]["value"] = expiring
+    tests = [make_test("one", "GET", "/api/products"), make_test("two", "GET", "/api/products")]
+    _, _, results = run(tests)
+    assert [r["outcome"] for r in results] == ["passed", "passed"]
+    assert len(issued) == 2
+
+
+def test_token_without_expiry_is_reused(server):
+    tests = [make_test("one", "GET", "/api/products"), make_test("two", "GET", "/api/products")]
+    _, summary, _ = run(tests)
+    assert summary["requests"] == 3  # One login and two tests.
+
+
+def test_no_credential_in_any_saved_or_shown_output(server, monkeypatch, capsys):
+    """NFR-04: search every report and log for the test credentials."""
+    api_key = "sk-ant-test-key-0001"
+    monkeypatch.setenv("ANTHROPIC_API_KEY", api_key)
+
+    def leaky(request):
+        if request.url.path == "/api/auth/login":
+            return shop(request)
+        # A faulty API that echoes the credentials and the token back.
+        text = f"{PASSWORD} {api_key} {request.headers.get('Authorization')}"
+        return httpx.Response(500, text=text)
+
+    server["handler"]["value"] = leaky
+    _, summary, results = run([make_test("list", "GET", "/api/products")])
+    print(format_run(summary, results))
+
+    saved = "".join(path.read_text() for path in Path("runs").rglob("*") if path.is_file())
+    assert "[REDACTED" in saved
+    for text in (saved, capsys.readouterr().out):
+        for secret in (PASSWORD, api_key, TOKEN):
+            assert secret not in text
